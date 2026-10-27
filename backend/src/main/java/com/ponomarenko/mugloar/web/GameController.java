@@ -1,0 +1,111 @@
+package com.ponomarenko.mugloar.web;
+
+import java.util.List;
+
+import com.ponomarenko.mugloar.domain.Reputation;
+import com.ponomarenko.mugloar.service.AutoplayOutcome;
+import com.ponomarenko.mugloar.service.GameService;
+import com.ponomarenko.mugloar.service.GameSession;
+import com.ponomarenko.mugloar.service.TurnRecord;
+import com.ponomarenko.mugloar.web.dto.AdView;
+import com.ponomarenko.mugloar.web.dto.AutoplayRequest;
+import com.ponomarenko.mugloar.web.dto.AutoplayView;
+import com.ponomarenko.mugloar.web.dto.GameView;
+import com.ponomarenko.mugloar.web.dto.ShopItemView;
+import com.ponomarenko.mugloar.web.dto.TurnView;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Pattern;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+/**
+ * REST API consumed by the frontend. Identifiers coming from the client are validated against
+ * a strict pattern before they are ever forwarded to the upstream game API.
+ */
+@RestController
+@RequestMapping("/api/games")
+public class GameController {
+
+	/** Ids are short alphanumeric tokens; anything else is rejected before reaching the upstream API. */
+	static final String ID_PATTERN = "^[A-Za-z0-9_-]{1,64}$";
+
+	private static final String ID_MESSAGE = "must be 1-64 characters of letters, digits, '-' or '_'";
+
+	private final GameService gameService;
+
+	public GameController(GameService gameService) {
+		this.gameService = gameService;
+	}
+
+	@PostMapping
+	@ResponseStatus(HttpStatus.CREATED)
+	public GameView startGame() {
+		return ViewMapper.game(gameService.startGame());
+	}
+
+	@GetMapping
+	public List<GameView> listGames() {
+		return gameService.listGames().stream().map(ViewMapper::game).toList();
+	}
+
+	@GetMapping("/{gameId}")
+	public GameView getGame(@PathVariable @Pattern(regexp = ID_PATTERN, message = ID_MESSAGE) String gameId) {
+		return ViewMapper.game(gameService.getGame(gameId));
+	}
+
+	@GetMapping("/{gameId}/ads")
+	public List<AdView> getAds(@PathVariable @Pattern(regexp = ID_PATTERN, message = ID_MESSAGE) String gameId) {
+		return ViewMapper.ads(gameService.getAds(gameId));
+	}
+
+	@PostMapping("/{gameId}/ads/{adId}/solve")
+	public TurnView solve(@PathVariable @Pattern(regexp = ID_PATTERN, message = ID_MESSAGE) String gameId,
+			@PathVariable @Pattern(regexp = ID_PATTERN, message = ID_MESSAGE) String adId) {
+		TurnRecord record = gameService.solve(gameId, adId);
+		return ViewMapper.turn(record, gameService.getGame(gameId));
+	}
+
+	@GetMapping("/{gameId}/shop")
+	public List<ShopItemView> getShop(@PathVariable @Pattern(regexp = ID_PATTERN, message = ID_MESSAGE) String gameId) {
+		return gameService.getShop(gameId).stream().map(ViewMapper::shopItem).toList();
+	}
+
+	@PostMapping("/{gameId}/shop/{itemId}/buy")
+	public TurnView buy(@PathVariable @Pattern(regexp = ID_PATTERN, message = ID_MESSAGE) String gameId,
+			@PathVariable @Pattern(regexp = ID_PATTERN, message = ID_MESSAGE) String itemId) {
+		TurnRecord record = gameService.buy(gameId, itemId);
+		return ViewMapper.turn(record, gameService.getGame(gameId));
+	}
+
+	@PostMapping("/{gameId}/reputation")
+	public Reputation investigate(@PathVariable @Pattern(regexp = ID_PATTERN, message = ID_MESSAGE) String gameId) {
+		return gameService.investigate(gameId);
+	}
+
+	@PostMapping("/{gameId}/autoplay/step")
+	public TurnView autoplayStep(@PathVariable @Pattern(regexp = ID_PATTERN, message = ID_MESSAGE) String gameId) {
+		TurnRecord record = gameService.autoplayStep(gameId);
+		return ViewMapper.turn(record, gameService.getGame(gameId));
+	}
+
+	@PostMapping("/{gameId}/autoplay")
+	public AutoplayView autoplay(@PathVariable @Pattern(regexp = ID_PATTERN, message = ID_MESSAGE) String gameId,
+			@RequestBody(required = false) @Valid AutoplayRequest request) {
+		int maxTurns = request != null ? request.maxTurnsOrDefault() : AutoplayRequest.DEFAULT_MAX_TURNS;
+		AutoplayOutcome outcome = gameService.autoplay(gameId, maxTurns);
+		return ViewMapper.autoplay(outcome, gameService.getGame(gameId));
+	}
+
+	@GetMapping("/{gameId}/history")
+	public List<TurnView> history(@PathVariable @Pattern(regexp = ID_PATTERN, message = ID_MESSAGE) String gameId) {
+		GameSession session = gameService.getGame(gameId);
+		return gameService.history(gameId).stream().map(t -> ViewMapper.turn(t, session)).toList();
+	}
+}
