@@ -5,10 +5,13 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import com.ponomarenko.mugloar.config.StrategyProperties;
 import com.ponomarenko.mugloar.domain.Ad;
 import com.ponomarenko.mugloar.domain.GameState;
+import com.ponomarenko.mugloar.domain.Probability;
 
 import org.springframework.stereotype.Component;
 
@@ -26,8 +29,14 @@ public class AdEvaluator {
 
 	private final StrategyProperties properties;
 
+	/** Whole-word, case-insensitive match of the risky keywords; {@code null} when none are configured. */
+	private final Pattern riskyKeywordPattern;
+
 	public AdEvaluator(StrategyProperties properties) {
 		this.properties = properties;
+		this.riskyKeywordPattern = properties.riskyKeywords().isEmpty() ? null
+				: Pattern.compile("\\b(?:" + properties.riskyKeywords().stream().map(Pattern::quote)
+						.collect(Collectors.joining("|")) + ")\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
 	}
 
 	/** Evaluates all ads and returns them ordered best first. */
@@ -52,7 +61,7 @@ public class AdEvaluator {
 		double expectedValue = successRate * ad.reward();
 		double score = expectedValue - (1 - successRate) * lifeCost(state.lives());
 
-		if (ad.probability() == com.ponomarenko.mugloar.domain.Probability.UNKNOWN) {
+		if (ad.probability() == Probability.UNKNOWN) {
 			notes.add("Unknown probability label '" + ad.probabilityLabel() + "'");
 		}
 		if (ad.wasEncrypted()) {
@@ -66,8 +75,8 @@ public class AdEvaluator {
 		double threshold = properties.minSuccessRateFor(state.lives());
 		boolean eligible = successRate >= threshold && ad.reward() > 0 && successRate > 0;
 		if (!eligible) {
-			notes.add(String.format(Locale.ROOT, "Below %.0f%% success threshold for %d lives",
-					threshold * 100, state.lives()));
+			notes.add(String.format(Locale.ROOT, "Below %.0f%% success threshold for %d %s", threshold * 100,
+					state.lives(), state.lives() == 1 ? "life" : "lives"));
 		}
 		return new AdAssessment(ad, successRate, expectedValue, score, RiskLevel.of(successRate), eligible, notes);
 	}
@@ -86,12 +95,9 @@ public class AdEvaluator {
 	}
 
 	boolean mentionsRiskyKeyword(String message) {
-		if (message == null) {
+		if (message == null || riskyKeywordPattern == null) {
 			return false;
 		}
-		String text = message.toLowerCase(Locale.ROOT);
-		return properties.riskyKeywords().stream()
-				.map(k -> k.toLowerCase(Locale.ROOT))
-				.anyMatch(text::contains);
+		return riskyKeywordPattern.matcher(message).find();
 	}
 }

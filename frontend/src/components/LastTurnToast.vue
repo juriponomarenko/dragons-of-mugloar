@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { onBeforeUnmount, ref, watch } from 'vue'
 import type { TurnView } from '@/api/types'
 
 const props = defineProps<{ turn: TurnView | null; durationMs?: number }>()
@@ -16,6 +16,8 @@ watch(
     timer = setTimeout(() => (visible.value = false), props.durationMs ?? 2500)
   },
 )
+
+onBeforeUnmount(() => clearTimeout(timer))
 </script>
 
 <template>

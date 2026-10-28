@@ -129,6 +129,8 @@ export const useGameStore = defineStore('game', () => {
   /** Loads an existing game (e.g. after a page refresh). Returns false if it is unknown. */
   async function loadGame(id: string): Promise<boolean> {
     if (gameId.value === id && game.value) {
+      // Already on screen (e.g. navigated away and back): just pick up any board changes.
+      await refreshBoard()
       return true
     }
     reset()

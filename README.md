@@ -21,11 +21,25 @@ The original assignment is kept verbatim in [TASK.md](TASK.md).
 └── README.md
 ```
 
+## Quick start
+
+Two terminals:
+
+```bash
+cd backend && ./mvnw spring-boot:run          # API on http://localhost:8080
+```
+
+```bash
+cd frontend && pnpm install && pnpm dev       # UI on http://localhost:5173
+```
+
+Open <http://localhost:5173>, press **Start a new game**, and either pick ads yourself or press **Autoplay**.
+
 ## Prerequisites
 
-- JDK 21 (e.g. [Eclipse Temurin](https://adoptium.net/))
+- JDK 21 (e.g. [Eclipse Temurin](https://adoptium.net/)); `JAVA_HOME` must point to it for the Maven wrapper.
 - Node.js 24+ and [pnpm](https://pnpm.io/) 10+
-- No global Maven needed: the project ships the Maven wrapper (`mvnw`).
+- No global Maven needed: the project ships the Maven wrapper (`mvnw`, `mvnw.cmd` on Windows).
 
 ## Running the backend
 
@@ -173,6 +187,14 @@ Mobile‑first CSS with a single breakpoint at 900px (board + sidebar) and 1100p
 ### Tests
 
 `pnpm test:unit` runs 48 Vitest tests: the API client against a mocked `fetch` (URL building, id validation, problem documents, network failures), the store with a mocked API (start/load/solve/buy, error resync, the autoplay loop with fake timers, server‑side finish), and the components with Vue Test Utils (rendering, sorting/filtering, emitted events, disabled states).
+
+## Known limitations and possible next steps
+
+- Game sessions live in the backend's memory. They are lost on restart and never evicted; a real deployment would put them behind the same `GameSessionRegistry` interface in Redis or a database and expire finished games.
+- There is no authentication: anyone who can reach the API can drive any game it knows. Fine for a test task, not for the internet.
+- The success rates behind the probability labels are empirical estimates, not values the game exposes. They are easy to recalibrate in `Probability`, and every other strategy knob is a property.
+- The autoplayer runs a game on one request thread; a long "finish game" call can take a minute or two. Streaming turns over SSE would make that nicer for the UI.
+- Frontend tests cover the client, the store and the components; the two views are exercised manually rather than with an end‑to‑end test.
 
 ## Use of AI tools
 

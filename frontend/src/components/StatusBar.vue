@@ -22,7 +22,6 @@ const livesClass = computed(() => {
           <span v-for="i in hearts" :key="i">♥</span>
           <span v-if="game.lives > 5" class="hearts__more">+{{ game.lives - 5 }}</span>
         </span>
-        <span class="visually-hidden">{{ game.lives }}</span>
         <span class="stat__number">{{ game.lives }}</span>
       </span>
     </div>

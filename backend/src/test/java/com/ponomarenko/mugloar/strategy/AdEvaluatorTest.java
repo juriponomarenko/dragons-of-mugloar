@@ -3,6 +3,7 @@ package com.ponomarenko.mugloar.strategy;
 import java.util.List;
 
 import com.ponomarenko.mugloar.TestFixtures;
+import com.ponomarenko.mugloar.config.StrategyProperties;
 import com.ponomarenko.mugloar.domain.Ad;
 import com.ponomarenko.mugloar.domain.Encryption;
 import com.ponomarenko.mugloar.domain.Probability;
@@ -83,6 +84,16 @@ class AdEvaluatorTest {
 	}
 
 	@Test
+	void riskyKeywordsMatchWholeWordsOnly() {
+		assertThat(evaluator.mentionsRiskyKeyword("Help Bob improve their skills")).isFalse();
+		assertThat(evaluator.mentionsRiskyKeyword("Kill the beast")).isFalse(); // 'kill' is not configured here
+		assertThat(evaluator.mentionsRiskyKeyword("Please steal, quietly")).isTrue();
+		AdEvaluator noKeywords = new AdEvaluator(new StrategyProperties(2, 50, List.of("cs"), true, 0.8, 0.6, 0.5,
+				50, List.of(), 0.6, 100));
+		assertThat(noKeywords.mentionsRiskyKeyword("steal everything")).isFalse();
+	}
+
+	@Test
 	void notesMentionDecodingAndUnknownLabels() {
 		Ad encrypted = new Ad("e", "task", 10, 1, Probability.GAMBLE, "Gamble", Encryption.BASE64);
 		Ad weird = new Ad("w", "task", 10, 1, Probability.UNKNOWN, "Who knows", Encryption.NONE);
@@ -90,7 +101,9 @@ class AdEvaluatorTest {
 		assertThat(evaluator.assess(encrypted, state(3, 0)).notes()).contains("Decoded from base64");
 		assertThat(evaluator.assess(weird, state(3, 0)).notes()).contains("Unknown probability label 'Who knows'");
 		assertThat(evaluator.assess(weird, state(1, 0)).notes())
-				.contains("Below 80% success threshold for 1 lives");
+				.contains("Below 80% success threshold for 1 life");
+		assertThat(evaluator.assess(weird, state(2, 0)).notes())
+				.contains("Below 60% success threshold for 2 lives");
 	}
 
 	@Test
