@@ -142,7 +142,37 @@ The more defensive potion policy trades a few turns of upgrades for extra lives 
 
 ## Frontend
 
-_To be filled in as the frontend lands._
+A Vue 3 single‑page app in [frontend/](frontend/) that covers the "Frontend adventure" and doubles as a cockpit for the backend's strategy.
+
+```
+src/api/         Typed fetch client (gameApi) and the API's TypeScript shapes; ids are validated before they reach a URL
+src/stores/      Pinia store `game`: the single source of truth for the game on screen and all actions
+src/views/       HomeView (start / resume) and PlayView (the game screen), wired through Vue Router
+src/components/  StatusBar, AdBoard + AdCard, ShopPanel, AutoplayControls, ReputationPanel, HistoryLog, banners/toast
+src/utils/       Formatting helpers
+```
+
+### What the player gets
+
+- **Status bar** with lives (hearts turn amber/red as they run out), gold, score, level and turn, sticky at the top on every screen size.
+- **Message board** with every ad decoded and assessed by the backend: success chance meter, expected value, advisor score, risk badge, expiry, and notes such as "May hurt reputation" or "Decoded from base64". The best eligible ad is marked **Recommended**; ads outside the current risk budget are dimmed. Sort by advisor score, reward, chance or urgency, or hide risky ads entirely.
+- **Shop** showing what is affordable, how many times each item was bought, and the item the strategy would buy now. Unaffordable items are disabled, so no turn is wasted on a failed purchase.
+- **Advisor panel**: play one turn, run autoplay turn by turn with an adjustable pause (so you can watch the reasoning), stop at any time, or hand the rest of the game to the server.
+- **History** of every action with the outcome, the API's message and, for advisor moves, the reason it was chosen.
+- **Reputation** on demand, a game‑over banner that says whether the 1000‑point target was met, and a toast after each action.
+- The last game id is remembered in `localStorage`, so a refresh or the "Resume last game" button brings you back.
+
+### State management and error handling
+
+All server interaction goes through the Pinia store. Components receive props and emit events only, which keeps them trivially testable. Every action clears the previous error, records the returned turn, refreshes the board, and on failure shows the backend's problem detail in one banner; a rejected action (expired ad, game over) also resyncs the game state from the server. Autoplay is a cancellable loop in the store, and concurrent actions are ignored while one is in flight.
+
+### Responsiveness and compatibility
+
+Mobile‑first CSS with a single breakpoint at 900px (board + sidebar) and 1100px (two‑column board). Only widely supported CSS is used (grid, flexbox, custom properties, `prefers-color-scheme` for a dark theme), no container queries or `:has()`. Vite targets modern evergreen browsers; the build is tested in Chromium and the layout at 375px, 768px and desktop widths.
+
+### Tests
+
+`pnpm test:unit` runs 48 Vitest tests: the API client against a mocked `fetch` (URL building, id validation, problem documents, network failures), the store with a mocked API (start/load/solve/buy, error resync, the autoplay loop with fake timers, server‑side finish), and the components with Vue Test Utils (rendering, sorting/filtering, emitted events, disabled states).
 
 ## Use of AI tools
 

@@ -46,7 +46,9 @@ public class GameEngine {
 
 	public List<Ad> fetchAds(GameSession session) {
 		requireActive(session);
-		return adDecoder.decodeAll(guardGameOver(session, () -> client.getMessages(session.gameId())));
+		List<Ad> ads = adDecoder.decodeAll(guardGameOver(session, () -> client.getMessages(session.gameId())));
+		session.rememberBoard(ads);
+		return ads;
 	}
 
 	public List<ShopItem> fetchShop(GameSession session) {
@@ -59,8 +61,8 @@ public class GameEngine {
 	}
 
 	/**
-	 * Attempts an ad. {@code description} is the ad text when known (for the history) and may
-	 * be {@code null} for manual requests that only carry an id.
+	 * Attempts an ad. {@code description} is the ad text when known (for the history); manual
+	 * requests only carry an id, so the text is looked up on the last fetched board instead.
 	 */
 	public TurnRecord solve(GameSession session, String adId, String description, String reason, boolean automated) {
 		requireActive(session);
@@ -75,9 +77,9 @@ public class GameEngine {
 			throw ex;
 		}
 		GameState after = session.state().after(response);
-		TurnRecord record = new TurnRecord(after.turn(), ActionType.SOLVE, adId,
-				description != null ? description : adId, response.success(), response.message(), reason, automated,
-				after, Instant.now());
+		String text = description != null ? description : session.describeAd(adId);
+		TurnRecord record = new TurnRecord(after.turn(), ActionType.SOLVE, adId, text != null ? text : adId,
+				response.success(), response.message(), reason, automated, after, Instant.now());
 		session.record(record);
 		log.debug("Game {} turn {}: solve {} -> {} (lives={}, gold={}, score={})", after.gameId(), after.turn(), adId,
 				response.success() ? "success" : "failure", after.lives(), after.gold(), after.score());

@@ -74,11 +74,20 @@ class GameEngineTest {
 	}
 
 	@Test
-	void manualSolveWithoutDescriptionUsesTheAdId() {
+	void manualSolveIsDescribedFromTheLastFetchedBoard() {
+		engine.fetchAds(session);
+
+		TurnRecord record = engine.solve(session, "easy", null, "", false);
+
+		assertThat(record.description()).isEqualTo("Help a neighbour");
+		assertThat(record.automated()).isFalse();
+	}
+
+	@Test
+	void manualSolveFallsBackToTheAdIdWhenTheBoardIsUnknown() {
 		TurnRecord record = engine.solve(session, "easy", null, "", false);
 
 		assertThat(record.description()).isEqualTo("easy");
-		assertThat(record.automated()).isFalse();
 	}
 
 	@Test

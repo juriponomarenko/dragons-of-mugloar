@@ -7,9 +7,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 
+import com.ponomarenko.mugloar.domain.Ad;
 import com.ponomarenko.mugloar.domain.GameState;
 import com.ponomarenko.mugloar.domain.ShopItem;
 
@@ -31,6 +33,8 @@ public class GameSession {
 	private volatile GameState state;
 
 	private volatile List<ShopItem> shop;
+
+	private volatile Map<String, String> lastBoard = Map.of();
 
 	public GameSession(GameState initial) {
 		this.state = initial;
@@ -117,6 +121,16 @@ public class GameSession {
 		finally {
 			lock.unlock();
 		}
+	}
+
+	/** Remembers the most recently fetched board so manual actions can be described by ad text. */
+	void rememberBoard(List<Ad> ads) {
+		lastBoard = ads.stream().collect(Collectors.toUnmodifiableMap(Ad::adId, Ad::message, (a, b) -> a));
+	}
+
+	/** The text of an ad from the last fetched board, or {@code null} if it is not on it. */
+	public String describeAd(String adId) {
+		return lastBoard.get(adId);
 	}
 
 	/** The shop listing does not change during a game, so it is fetched once per session. */
