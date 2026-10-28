@@ -1,8 +1,8 @@
 package com.ponomarenko.mugloar.strategy;
 
-import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 import java.util.Optional;
 
@@ -28,8 +28,9 @@ public class GameStrategy {
 		this.shoppingPolicy = shoppingPolicy;
 	}
 
-	public Decision decide(GameState state, List<Ad> ads, List<ShopItem> shop, Collection<String> ownedItemIds) {
-		Optional<ShopItem> purchase = shoppingPolicy.choosePurchase(state, shop, ownedItemIds);
+	public Decision decide(GameState state, List<Ad> ads, List<ShopItem> shop, Map<String, Integer> purchases,
+			Map<String, Integer> failedFamilies) {
+		Optional<ShopItem> purchase = shoppingPolicy.choosePurchase(state, shop, purchases);
 		if (purchase.isPresent()) {
 			ShopItem item = purchase.get();
 			String reason = StrategyProperties.HEALING_POTION_ID.equals(item.id())
@@ -38,7 +39,7 @@ public class GameStrategy {
 			return new Decision.Buy(item, reason);
 		}
 
-		List<AdAssessment> ranked = adEvaluator.evaluate(ads, state);
+		List<AdAssessment> ranked = adEvaluator.evaluate(ads, state, shop, failedFamilies);
 		Optional<AdAssessment> best = ranked.stream().filter(AdAssessment::eligible).findFirst();
 		if (best.isPresent()) {
 			AdAssessment a = best.get();

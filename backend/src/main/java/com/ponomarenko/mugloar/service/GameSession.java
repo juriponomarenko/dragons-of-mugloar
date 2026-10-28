@@ -3,6 +3,7 @@ package com.ponomarenko.mugloar.service;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,6 +30,9 @@ public class GameSession {
 	private final List<TurnRecord> history = new ArrayList<>();
 
 	private final Map<String, Integer> purchases = new LinkedHashMap<>();
+
+	/** How often ads of each family (see {@link Ad#family()}) have failed in this game. */
+	private final Map<String, Integer> failedFamilies = new HashMap<>();
 
 	private volatile GameState state;
 
@@ -75,6 +79,9 @@ public class GameSession {
 			if (turn.action() == ActionType.BUY && turn.success()) {
 				purchases.merge(turn.targetId(), 1, Integer::sum);
 			}
+			if (turn.action() == ActionType.SOLVE && !turn.success()) {
+				failedFamilies.merge(Ad.family(turn.description()), 1, Integer::sum);
+			}
 		}
 		finally {
 			lock.unlock();
@@ -117,6 +124,16 @@ public class GameSession {
 		lock.lock();
 		try {
 			return Collections.unmodifiableMap(new LinkedHashMap<>(purchases));
+		}
+		finally {
+			lock.unlock();
+		}
+	}
+
+	public Map<String, Integer> failedFamilies() {
+		lock.lock();
+		try {
+			return Map.copyOf(failedFamilies);
 		}
 		finally {
 			lock.unlock();

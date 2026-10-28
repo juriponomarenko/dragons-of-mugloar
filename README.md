@@ -38,7 +38,7 @@ Open <http://localhost:5173>, press **Start a new game**, and either pick ads yo
 ## Prerequisites
 
 - JDK 21 (e.g. [Eclipse Temurin](https://adoptium.net/)); `JAVA_HOME` must point to it for the Maven wrapper.
-- Node.js 24+ and [pnpm](https://pnpm.io/) 10+
+- Node.js 24+ (tested on 24 and 26) and [pnpm](https://pnpm.io/) 10+
 - No global Maven needed: the project ships the Maven wrapper (`mvnw`, `mvnw.cmd` on Windows).
 
 ## Running the backend
@@ -59,7 +59,7 @@ cd backend
 
 ### Playing a game from the command line
 
-The `autoplay` profile starts no web server; it plays one or more complete games with the built‑in strategy, prints a summary and exits with a non‑zero code if any game ended below 1000 points:
+The `autoplay` profile starts no web server; it plays one or more games with the built‑in strategy, prints a summary and exits with a non‑zero code if any game ended below 1000 points. A well‑upgraded dragon never dies, so each game stops after `mugloar.autoplay.max-turns` actions (default 1000); the server keeps the score either way:
 
 ```bash
 cd backend
@@ -103,11 +103,22 @@ Each layer depends only on the ones below it. The strategy is plain code with no
 
 Every turn the strategy makes one decision, in this order:
 
-1. **Survive.** If lives are at or below the configured threshold (default 2) and a healing potion is affordable, buy one.
-2. **Invest.** If gold exceeds the reserve kept for a potion, buy the next upgrade in the configured order. Upgrades raise the dragon's level, which the server rewards with easier ads.
+1. **Survive.** If lives are at or below the configured threshold (default 3) and a healing potion is affordable, buy one.
+2. **Invest.** Climb the upgrade ladder: rungs are the configured upgrade order, and the next rung is the one bought the fewest times so far, so every upgrade is bought once before any is bought twice. The first rung the gold above the potion reserve covers is bought; an unaffordable rung is skipped for now rather than saved for, because a cheap level-up today beats an expensive one in ten turns. Upgrades raise the dragon's level, which the server rewards with easier ads.
 3. **Earn.** Otherwise rank the ads and solve the best eligible one.
 
-Ads are scored as `successRate × reward − (1 − successRate) × lifeCost`, where the success rate is an empirical mapping of the game's textual labels ("Sure thing" … "Impossible") and the cost of a life grows as lives run out. Ads whose text suggests a reputation hit (stealing, kidnapping, …) are penalised. An ad is only *eligible* when its success rate clears a threshold that tightens with fewer lives; if nothing on the board is eligible the strategy prefers buying a potion (which rolls the board over) and only as a last resort attempts the least dangerous ad.
+Ads are scored as `successRate × reward − (1 − successRate) × lifeCost`, where a life is valued at 100 gold (the potion plus the turn it takes to buy it back), the success rate is an assumed mapping of the game's textual labels ("Sure thing" = 1.0 … "Impossible" = 0; the game never exposes numbers, and these are not rates measured by this project) and the cost of a life grows as lives run out. Ads whose text suggests a reputation hit (stealing, kidnapping, …) have their expected gold discounted before the life cost is subtracted, so the penalty can only ever lower a score. An ad is only *eligible* when its success rate clears a threshold that tightens with fewer lives (60% at three or more lives, so a *Gamble* is never taken at full health; 80% at one life). A life that cannot be replaced counts for one more: when a healing potion is not affordable, ads are judged as if one life fewer remained. If nothing on the board is eligible the strategy prefers buying a potion (which rolls the board over) and only as a last resort attempts the least dangerous ad.
+
+**Labels can lie.** Dumping the history of games that died early showed the same pattern every time: from about turn 25 the board offers "Steal super awesome diamond …" ads labelled *Sure thing* with rewards of 300+ gold, and they fail every single time (nine of nine in the game below). Discounting the reward for the word "steal" is not enough, because 60% of 322 still beats every honest ad. Two rules handle this. Ads matching a configured trap phrase (default `super awesome diamond`) are estimated at 0% whatever the label says. And the player learns within a game: ads are grouped into families by their first four words, and once a family has failed twice (configurable) it is treated as a certain failure for the rest of that game, so an unknown trap costs at most two lives. Both show up as notes on the ad in the UI.
+
+```text
+ 25 XX  L3 g 192 lv  6 sc  892 | Steal super awesome diamond pan from Kassiopeia Clemens | Best eligible ad: Sure thing, reward 228
+ 26 buy L4 g 142 lv  6 sc  892 | Healing potion                                           | Lives are low (3), buying a healing potion
+ 30 XX  L3 g 164 lv  8 sc 1114 | Steal super awesome diamond turnips from Cosma Isaacson  | Best eligible ad: Sure thing, reward 280
+ 34 XX  L3 g  64 lv  8 sc 1114 | Steal super awesome diamond horse from Sonja Courtier    | Best eligible ad: Sure thing, reward 322
+ ...
+ 48 XX  L0 g  17 lv  8 sc 1317 | Steal super awesome diamond horse from Yahui Rowbottom   | Best eligible ad: Sure thing, reward 329
+```
 
 The game encodes some ads (`encrypted = 1` is Base64, `2` is ROT13). The decoder tries the hinted scheme and verifies the result by checking that the decoded probability is a known label, falling back to the other schemes otherwise, so a renumbered scheme cannot silently break the player.
 
@@ -118,7 +129,7 @@ Everything above is tunable through `mugloar.strategy.*` properties (see `Strate
 - Path variables are validated against a strict id pattern before anything is forwarded upstream; request bodies are bean‑validated.
 - Every failure is returned as an RFC 9457 problem document: `400` invalid input, `404` unknown game, `409` game over, `422` action not possible (expired ad, unaffordable item), `502`/`503` upstream API failure.
 - Unaffordable or unknown purchases are refused locally, because the game charges a turn even for a failed purchase.
-- The autoplayer tolerates transient upstream errors and expired ads (it refreshes the board and retries) and gives up after three consecutive failures instead of looping forever.
+- The autoplayer tolerates transient upstream errors and expired ads (it refreshes the board and retries, waiting 10, 20 and 30 seconds when the API answers HTTP 429, since a strong dragon makes around ten requests a second) and gives up after three consecutive failures instead of looping forever. The CLI waits out a rate limit on game start and reports a game it could not start rather than aborting the run.
 - Upstream HTTP 410 ("Game Over") closes the session even if local bookkeeping disagrees.
 - Each game session is guarded by a lock so a manual click and an autoplay request cannot interleave.
 
@@ -144,15 +155,18 @@ Everything above is tunable through `mugloar.strategy.*` properties (see `Strate
 
 ### Results
 
-Measured against the live API with the CLI autoplayer (5 games per configuration, 27 Oct 2026):
+Measured against the live API with the CLI autoplayer. Later rows are later versions of the strategy; the 28 Oct runs are 10 games each, capped at 500 actions per game.
 
-| Configuration | Min | Avg | Max | Reached 1000+ |
-| --- | --- | --- | --- | --- |
-| Potion at ≤2 lives, 50 gold reserve | 1225 | 3099 | 4630 | 5/5 |
-| **Potion at ≤3 lives, 100 gold reserve (default)** | 3348 | 4216 | 5259 | 5/5 |
-| Default, but each upgrade bought only once | 1957 | 4884 | 6606 | 5/5 |
+| Strategy version | Games | Min | Avg | Max | Reached 1000+ |
+| --- | --- | --- | --- | --- | --- |
+| 27 Oct: potion at ≤3 lives, 100 gold reserve, first affordable upgrade rebought | 5 | 3348 | 4216 | 5259 | 5/5 |
+| 28 Oct: upgrade ladder, penalty fix | 10 | 492 | 6162 | 11951 | 8/10 |
+| 28 Oct: + life valued at 100 gold, no *Gamble* at full health | 10 | 954 | 8680 | 27864 | 9/10 |
+| **28 Oct: + trap phrases and per-game distrust (current default)** | 10 | 3917 | 9387 | 20293 | **10/10** |
 
-The more defensive potion policy trades a few turns of upgrades for extra lives and raised the floor by almost 3×, so it became the default. Buying each upgrade only once (then hoarding gold for potions) produces longer games and a higher average, but a lower floor; since the task asks for *reliably* reaching 1000 points, the configuration with the highest minimum is the default and the other is one property away (`mugloar.strategy.rebuy-upgrades=false`). Every configuration tried cleared the 1000‑point bar in every game; the figures are small samples and vary from run to run.
+What the rows say: climbing the upgrade ladder roughly doubled the average and the ceiling (a dragon at level 100+ is handed easy ads worth hundreds of gold), but it exposed a failure mode the first version had merely been lucky about. Every lost game, in every version, died between turns 29 and 48 at level 2 to 9, and the history dumps all showed the same "Sure thing" trap ads failing in a row. Recognising the trap phrase and distrusting any ad family that fails twice removed those deaths; the more cautious life valuation is kept because it costs nothing late in the game, when rewards dwarf the life cost.
+
+The samples are small and scores vary a lot from run to run (the same strategy produced 3917 and 20293 in one batch), so treat the averages as indicative. The floor is the number that matters for the task, and every knob in the table is a `mugloar.strategy.*` property, so each row can be reproduced.
 
 ## Frontend
 
@@ -192,7 +206,7 @@ Mobile‑first CSS with a single breakpoint at 900px (board + sidebar) and 1100p
 
 - Game sessions live in the backend's memory. They are lost on restart and never evicted; a real deployment would put them behind the same `GameSessionRegistry` interface in Redis or a database and expire finished games.
 - There is no authentication: anyone who can reach the API can drive any game it knows. Fine for a test task, not for the internet.
-- The success rates behind the probability labels are empirical estimates, not values the game exposes. They are easy to recalibrate in `Probability`, and every other strategy knob is a property.
+- The success rates behind the probability labels are assumed, not measured: the game never exposes numbers, and this project has not run enough games to calibrate them. They are one table in `Probability`, and every other strategy knob is a property.
 - The autoplayer runs a game on one request thread; a long "finish game" call can take a minute or two. Streaming turns over SSE would make that nicer for the UI.
 - Frontend tests cover the client, the store and the components; the two views are exercised manually rather than with an end‑to‑end test.
 

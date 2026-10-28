@@ -5,8 +5,9 @@ import java.util.Locale;
 
 /**
  * The textual probability labels the game attaches to ads, mapped to an estimated success
- * rate. The rates are empirical: the API never exposes numbers, so these were calibrated by
- * playing many games and are deliberately slightly conservative.
+ * rate. The API never exposes numbers; these are the commonly assumed values for the labels
+ * (an evenly spaced scale from "Sure thing" to "Impossible"), not rates measured by this
+ * project. They are easy to replace should measurements say otherwise.
  */
 public enum Probability {
 

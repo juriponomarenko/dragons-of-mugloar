@@ -135,7 +135,7 @@ class AutoPlayerTest {
 	@Test
 	void turnLimitIsCappedByConfiguration() {
 		StrategyProperties capped = new StrategyProperties(2, 50, List.of("cs"), true, 0.8, 0.6, 0.5, 50, List.of(),
-				1.0, 2);
+				1.0, 2, List.of(), 2);
 		GameStrategy strategy = new GameStrategy(new AdEvaluator(capped), new ShoppingPolicy(capped));
 		AutoPlayer cappedPlayer = new AutoPlayer(engine, strategy, capped);
 

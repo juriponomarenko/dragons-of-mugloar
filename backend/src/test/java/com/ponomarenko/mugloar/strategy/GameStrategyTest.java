@@ -1,7 +1,7 @@
 package com.ponomarenko.mugloar.strategy;
 
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 
 import com.ponomarenko.mugloar.TestFixtures;
 import com.ponomarenko.mugloar.domain.Probability;
@@ -24,7 +24,7 @@ class GameStrategyTest {
 	@Test
 	void shoppingComesBeforeSolving() {
 		Decision decision = strategy.decide(state(2, 60), List.of(ad("easy", Probability.SURE_THING, 100)), SHOP,
-				Set.of());
+				Map.of(), Map.of());
 
 		assertThat(decision).isInstanceOfSatisfying(Decision.Buy.class, buy -> {
 			assertThat(buy.item()).isEqualTo(POTION);
@@ -35,7 +35,7 @@ class GameStrategyTest {
 	@Test
 	void surplusGoldGoesIntoUpgrades() {
 		Decision decision = strategy.decide(state(3, 150), List.of(ad("easy", Probability.SURE_THING, 100)), SHOP,
-				Set.of());
+				Map.of(), Map.of());
 
 		assertThat(decision).isInstanceOfSatisfying(Decision.Buy.class, buy -> {
 			assertThat(buy.item()).isEqualTo(CLAW_SHARPENING);
@@ -48,7 +48,7 @@ class GameStrategyTest {
 		Decision decision = strategy.decide(state(3, 10),
 				List.of(ad("meh", Probability.SURE_THING, 5), ad("good", Probability.PIECE_OF_CAKE, 90),
 						ad("deadly", Probability.IMPOSSIBLE, 999)),
-				SHOP, Set.of());
+				SHOP, Map.of(), Map.of());
 
 		assertThat(decision).isInstanceOfSatisfying(Decision.Solve.class, solve -> {
 			assertThat(solve.assessment().ad().adId()).isEqualTo("good");
@@ -59,7 +59,7 @@ class GameStrategyTest {
 	@Test
 	void buysPotionToRerollWhenNoAdIsSafeEnough() {
 		Decision decision = strategy.decide(state(3, 50), List.of(ad("deadly", Probability.IMPOSSIBLE, 999)), SHOP,
-				Set.of());
+				Map.of(), Map.of());
 
 		assertThat(decision).isInstanceOfSatisfying(Decision.Buy.class, buy -> {
 			assertThat(buy.item()).isEqualTo(POTION);
@@ -72,7 +72,7 @@ class GameStrategyTest {
 		Decision decision = strategy.decide(state(3, 10),
 				List.of(ad("deadly", Probability.IMPOSSIBLE, 999), ad("risky", Probability.RISKY, 10),
 						ad("fire", Probability.PLAYING_WITH_FIRE, 500)),
-				SHOP, Set.of());
+				SHOP, Map.of(), Map.of());
 
 		assertThat(decision).isInstanceOfSatisfying(Decision.Solve.class, solve -> {
 			assertThat(solve.assessment().ad().adId()).isEqualTo("risky");
@@ -85,7 +85,7 @@ class GameStrategyTest {
 		List<ShopItem> noPotion = List.of(CLAW_SHARPENING);
 
 		assertThatIllegalStateException()
-				.isThrownBy(() -> strategy.decide(state(3, 10), List.of(), noPotion, Set.of()))
+				.isThrownBy(() -> strategy.decide(state(3, 10), List.of(), noPotion, Map.of(), Map.of()))
 				.withMessage("No ads available");
 	}
 }

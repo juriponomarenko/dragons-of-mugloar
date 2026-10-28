@@ -91,11 +91,15 @@ class GameEngineTest {
 	}
 
 	@Test
-	void failedSolveCostsALife() {
-		TurnRecord record = engine.solve(session, "hard", null, "", false);
+	void failedSolveCostsALifeAndIsRememberedByAdFamily() {
+		TurnRecord record = engine.solve(session, "hard", "Steal super awesome diamond pan from Bob", "", false);
 
 		assertThat(record.success()).isFalse();
 		assertThat(record.stateAfter().lives()).isEqualTo(2);
+		assertThat(session.failedFamilies()).containsEntry("steal super awesome diamond", 1);
+
+		engine.solve(session, "hard", "Steal super awesome diamond cat from Alice", "", false);
+		assertThat(session.failedFamilies()).containsEntry("steal super awesome diamond", 2);
 	}
 
 	@Test

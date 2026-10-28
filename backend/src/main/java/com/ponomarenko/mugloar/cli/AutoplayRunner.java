@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+import com.ponomarenko.mugloar.client.MugloarApiException;
 import com.ponomarenko.mugloar.service.AutoplayOutcome;
 import com.ponomarenko.mugloar.service.GameService;
 import org.slf4j.Logger;
@@ -21,7 +22,8 @@ import org.springframework.stereotype.Component;
  * summary. Activated with the {@code autoplay} profile, e.g.
  * {@code ./mvnw spring-boot:run -Dspring-boot.run.profiles=autoplay}. The process exit code
  * is non-zero when any game finished below the target score, which makes it usable as a
- * regression check.
+ * regression check. A well-upgraded dragon never dies, so each game is capped at
+ * {@code mugloar.autoplay.max-turns} actions; the server keeps the score either way.
  */
 @Component
 @Profile("autoplay")
@@ -29,26 +31,39 @@ public class AutoplayRunner implements ApplicationRunner, ExitCodeGenerator {
 
 	private static final Logger log = LoggerFactory.getLogger(AutoplayRunner.class);
 
+	private static final int HTTP_TOO_MANY_REQUESTS = 429;
+
+	private static final int START_ATTEMPTS = 4;
+
+	private static final int RATE_LIMIT_PAUSE_SECONDS = 30;
+
 	private final GameService gameService;
 
 	private final int games;
 
 	private final int targetScore;
 
+	private final int maxTurns;
+
 	private int exitCode;
 
 	public AutoplayRunner(GameService gameService, @Value("${mugloar.autoplay.games:1}") int games,
-			@Value("${mugloar.autoplay.target-score:1000}") int targetScore) {
+			@Value("${mugloar.autoplay.target-score:1000}") int targetScore,
+			@Value("${mugloar.autoplay.max-turns:1000}") int maxTurns) {
 		this.gameService = gameService;
 		this.games = games;
 		this.targetScore = targetScore;
+		this.maxTurns = maxTurns;
 	}
 
 	@Override
 	public void run(ApplicationArguments args) {
 		List<AutoplayOutcome> outcomes = new ArrayList<>();
 		for (int i = 1; i <= games; i++) {
-			AutoplayOutcome outcome = gameService.playNewGame(Integer.MAX_VALUE);
+			AutoplayOutcome outcome = playWithPatience(i);
+			if (outcome == null) {
+				continue;
+			}
 			outcomes.add(outcome);
 			System.out.printf(Locale.ROOT, "Game %d/%d  id=%s  score=%d  turns=%d  level=%d  gold=%d  %s%n", i, games,
 					outcome.finalState().gameId(), outcome.finalState().score(), outcome.turns().size(),
@@ -63,6 +78,35 @@ public class AutoplayRunner implements ApplicationRunner, ExitCodeGenerator {
 		exitCode = reachedTarget == games ? 0 : 1;
 		if (exitCode != 0) {
 			log.warn("{} game(s) finished below the target score of {}", games - reachedTarget, targetScore);
+		}
+	}
+
+	/** Plays one game; when the API rate-limits the start, waits and tries again a few times. */
+	private AutoplayOutcome playWithPatience(int number) {
+		for (int attempt = 1; attempt <= START_ATTEMPTS; attempt++) {
+			try {
+				return gameService.playNewGame(maxTurns);
+			}
+			catch (MugloarApiException ex) {
+				if (ex.getStatus() != HTTP_TOO_MANY_REQUESTS || attempt == START_ATTEMPTS) {
+					System.out.printf(Locale.ROOT, "Game %d/%d  could not be started: %s%n", number, games,
+							ex.getMessage());
+					return null;
+				}
+				log.info("Rate limited while starting game {}; waiting {} s before trying again", number,
+						RATE_LIMIT_PAUSE_SECONDS);
+				sleepSeconds(RATE_LIMIT_PAUSE_SECONDS);
+			}
+		}
+		return null;
+	}
+
+	private static void sleepSeconds(int seconds) {
+		try {
+			Thread.sleep(seconds * 1000L);
+		}
+		catch (InterruptedException ex) {
+			Thread.currentThread().interrupt();
 		}
 	}
 

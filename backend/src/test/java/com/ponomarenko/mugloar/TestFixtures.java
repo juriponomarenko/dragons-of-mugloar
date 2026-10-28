@@ -27,7 +27,7 @@ public final class TestFixtures {
 
 	public static StrategyProperties defaultStrategy() {
 		return new StrategyProperties(2, 50, List.of("cs", "gas", "ch"), true, 0.8, 0.6, 0.5, 50,
-				List.of("steal", "kidnap"), 0.6, 5000);
+				List.of("steal", "kidnap"), 0.6, 5000, List.of("super awesome diamond"), 2);
 	}
 
 	public static GameState state(int lives, int gold) {

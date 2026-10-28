@@ -56,7 +56,7 @@ public class GameService {
 		GameSession session = registry.require(gameId);
 		return session.locked(() -> {
 			List<Ad> ads = engine.fetchAds(session);
-			return adEvaluator.evaluate(ads, session.state());
+			return adEvaluator.evaluate(ads, session.state(), engine.fetchShop(session), session.failedFamilies());
 		});
 	}
 
@@ -68,7 +68,7 @@ public class GameService {
 			Map<String, Integer> purchases = session.purchases();
 			return shop.stream()
 					.map(item -> new ShopOffer(item, state.gold() >= item.cost(), purchases.getOrDefault(item.id(), 0),
-							!state.isOver() && shoppingPolicy.isSuggested(item, state, shop, purchases.keySet())))
+							!state.isOver() && shoppingPolicy.isSuggested(item, state, shop, purchases)))
 					.toList();
 		});
 	}

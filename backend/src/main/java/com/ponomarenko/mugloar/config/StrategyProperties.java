@@ -22,10 +22,14 @@ import org.springframework.validation.annotation.Validated;
  * @param minSuccessRateCritical minimum success rate of an ad when only one life is left
  * @param minSuccessRateLow minimum success rate of an ad when two lives are left
  * @param minSuccessRateNormal minimum success rate of an ad otherwise
- * @param lifeValue gold-equivalent cost of losing a life, used when scoring ads
+ * @param lifeValue gold-equivalent cost of losing a life, used when scoring ads: the potion price plus the
+ * turn it takes to buy one back
  * @param riskyKeywords words in an ad text that make it less attractive (reputation risk)
  * @param riskyKeywordPenalty multiplier applied to the score of ads containing a risky keyword
  * @param maxTurns hard upper bound on turns played by the autoplayer, as a safety net
+ * @param trapPhrases phrases marking ads that are known to fail whatever their label says
+ * @param distrustAfterFailures once ads of one family have failed this many times in a game, the family is
+ * treated as a certain failure for the rest of that game
  */
 @Validated
 @ConfigurationProperties(prefix = "mugloar.strategy")
@@ -37,11 +41,13 @@ public record StrategyProperties(
 		@DefaultValue("true") boolean rebuyUpgrades,
 		@DecimalMin("0") @DecimalMax("1") @DefaultValue("0.8") double minSuccessRateCritical,
 		@DecimalMin("0") @DecimalMax("1") @DefaultValue("0.6") double minSuccessRateLow,
-		@DecimalMin("0") @DecimalMax("1") @DefaultValue("0.5") double minSuccessRateNormal,
-		@Min(0) @DefaultValue("50") int lifeValue,
+		@DecimalMin("0") @DecimalMax("1") @DefaultValue("0.6") double minSuccessRateNormal,
+		@Min(0) @DefaultValue("100") int lifeValue,
 		@DefaultValue({ "steal", "kidnap", "assassinate", "infiltrate", "kill" }) List<String> riskyKeywords,
 		@DecimalMin("0") @DecimalMax("1") @DefaultValue("0.6") double riskyKeywordPenalty,
-		@Min(1) @DefaultValue("5000") int maxTurns) {
+		@Min(1) @DefaultValue("5000") int maxTurns,
+		@DefaultValue({ "super awesome diamond" }) List<String> trapPhrases,
+		@Min(1) @DefaultValue("2") int distrustAfterFailures) {
 
 	public static final String HEALING_POTION_ID = "hpot";
 

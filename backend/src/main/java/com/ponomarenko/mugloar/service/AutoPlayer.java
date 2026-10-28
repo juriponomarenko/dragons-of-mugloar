@@ -27,6 +27,8 @@ public class AutoPlayer {
 
 	static final int MAX_CONSECUTIVE_FAILURES = 3;
 
+	private static final int HTTP_TOO_MANY_REQUESTS = 429;
+
 	private final GameEngine engine;
 
 	private final GameStrategy strategy;
@@ -47,7 +49,7 @@ public class AutoPlayer {
 		GameState state = session.state();
 		List<Ad> ads = engine.fetchAds(session);
 		List<ShopItem> shop = engine.fetchShop(session);
-		Decision decision = strategy.decide(state, ads, shop, session.ownedItemIds());
+		Decision decision = strategy.decide(state, ads, shop, session.purchases(), session.failedFamilies());
 		return switch (decision) {
 			case Decision.Buy buy -> engine.buy(session, buy.item().id(), buy.reason(), true);
 			case Decision.Solve solve -> engine.solve(session, solve.assessment().ad().adId(),
@@ -91,7 +93,7 @@ public class AutoPlayer {
 					stoppedBecause = "Stopped after repeated upstream errors: " + ex.getMessage();
 					break;
 				}
-				pauseBeforeRetry(consecutiveFailures);
+				pauseBeforeRetry(consecutiveFailures, ex.getStatus());
 			}
 			catch (IllegalStateException ex) {
 				stoppedBecause = "Stopped: " + ex.getMessage();
@@ -107,9 +109,14 @@ public class AutoPlayer {
 		return new AutoplayOutcome(finalState, turns, session.isOver(), stoppedBecause);
 	}
 
-	private static void pauseBeforeRetry(int attempt) {
+	/**
+	 * Rate limiting (HTTP 429) needs tens of seconds, not milliseconds, before the next try:
+	 * the three attempts together wait a full minute.
+	 */
+	private static void pauseBeforeRetry(int attempt, int status) {
+		long millis = status == HTTP_TOO_MANY_REQUESTS ? 10_000L * attempt : 250L * attempt;
 		try {
-			Thread.sleep(250L * attempt);
+			Thread.sleep(millis);
 		}
 		catch (InterruptedException ex) {
 			Thread.currentThread().interrupt();
