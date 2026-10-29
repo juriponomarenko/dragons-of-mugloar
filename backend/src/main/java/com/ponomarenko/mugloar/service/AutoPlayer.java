@@ -2,6 +2,7 @@ package com.ponomarenko.mugloar.service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.LongConsumer;
 
 import com.ponomarenko.mugloar.client.MugloarApiException;
 import com.ponomarenko.mugloar.config.StrategyProperties;
@@ -13,6 +14,7 @@ import com.ponomarenko.mugloar.strategy.GameStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
@@ -27,18 +29,26 @@ public class AutoPlayer {
 
 	static final int MAX_CONSECUTIVE_FAILURES = 3;
 
-	private static final int HTTP_TOO_MANY_REQUESTS = 429;
-
 	private final GameEngine engine;
 
 	private final GameStrategy strategy;
 
 	private final StrategyProperties properties;
 
+	/** Sleeps for the given number of milliseconds between retries. */
+	private final LongConsumer pause;
+
+	@Autowired
 	public AutoPlayer(GameEngine engine, GameStrategy strategy, StrategyProperties properties) {
+		this(engine, strategy, properties, AutoPlayer::sleep);
+	}
+
+	/** Lets tests observe the pauses instead of waiting them out. */
+	AutoPlayer(GameEngine engine, GameStrategy strategy, StrategyProperties properties, LongConsumer pause) {
 		this.engine = engine;
 		this.strategy = strategy;
 		this.properties = properties;
+		this.pause = pause;
 	}
 
 	/** Lets the strategy choose and perform exactly one action. Caller holds the session lock. */
@@ -113,8 +123,11 @@ public class AutoPlayer {
 	 * Rate limiting (HTTP 429) needs tens of seconds, not milliseconds, before the next try:
 	 * the three attempts together wait a full minute.
 	 */
-	private static void pauseBeforeRetry(int attempt, int status) {
-		long millis = status == HTTP_TOO_MANY_REQUESTS ? 10_000L * attempt : 250L * attempt;
+	private void pauseBeforeRetry(int attempt, int status) {
+		pause.accept(status == MugloarApiException.TOO_MANY_REQUESTS ? 10_000L * attempt : 250L * attempt);
+	}
+
+	private static void sleep(long millis) {
 		try {
 			Thread.sleep(millis);
 		}

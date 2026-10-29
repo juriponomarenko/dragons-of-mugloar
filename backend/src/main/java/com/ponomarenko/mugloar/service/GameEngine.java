@@ -71,7 +71,7 @@ public class GameEngine {
 			response = guardGameOver(session, () -> client.solve(session.gameId(), adId));
 		}
 		catch (MugloarApiException ex) {
-			if (ex.isClientError()) {
+			if (ex.isRejectedRequest()) {
 				throw new InvalidActionException("Ad '" + adId + "' cannot be solved: it has expired or does not exist");
 			}
 			throw ex;

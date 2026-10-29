@@ -31,8 +31,6 @@ public class AutoplayRunner implements ApplicationRunner, ExitCodeGenerator {
 
 	private static final Logger log = LoggerFactory.getLogger(AutoplayRunner.class);
 
-	private static final int HTTP_TOO_MANY_REQUESTS = 429;
-
 	private static final int START_ATTEMPTS = 4;
 
 	private static final int RATE_LIMIT_PAUSE_SECONDS = 30;
@@ -88,7 +86,7 @@ public class AutoplayRunner implements ApplicationRunner, ExitCodeGenerator {
 				return gameService.playNewGame(maxTurns);
 			}
 			catch (MugloarApiException ex) {
-				if (ex.getStatus() != HTTP_TOO_MANY_REQUESTS || attempt == START_ATTEMPTS) {
+				if (!ex.isTooManyRequests() || attempt == START_ATTEMPTS) {
 					System.out.printf(Locale.ROOT, "Game %d/%d  could not be started: %s%n", number, games,
 							ex.getMessage());
 					return null;

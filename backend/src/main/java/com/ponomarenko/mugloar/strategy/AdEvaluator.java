@@ -131,8 +131,8 @@ public class AdEvaluator {
 	}
 
 	/**
-	 * Gold-equivalent cost of losing a life. A healing potion costs 50 gold, so that is the
-	 * baseline; the fewer lives remain, the more each one is worth.
+	 * Gold-equivalent cost of losing a life: the configured {@code lifeValue} (a potion plus
+	 * the turn spent buying it back) multiplied up as lives run out.
 	 */
 	double lifeCost(int lives) {
 		int multiplier = switch (lives) {

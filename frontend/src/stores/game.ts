@@ -211,7 +211,11 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
-  /** Lets the backend strategy play turn by turn, with a pause between turns so the player can follow. */
+  /**
+   * Lets the backend strategy play turn by turn, with a pause between turns so the player can
+   * follow. The board is refreshed after every step, so the card the advisor just solved
+   * disappears and the next recommendation is visible before the next step is taken.
+   */
   async function runAutoplay(): Promise<void> {
     if (autoplay.running || !game.value || isGameOver.value) {
       return
@@ -220,7 +224,7 @@ export const useGameStore = defineStore('game', () => {
     autoplay.stopRequested = false
     try {
       while (!autoplay.stopRequested && game.value && !game.value.gameOver) {
-        const turn = await performAction((id) => gameApi.autoplayStep(id), { refresh: false })
+        const turn = await performAction((id) => gameApi.autoplayStep(id))
         if (!turn || turn.state.gameOver || autoplay.stopRequested) {
           break
         }

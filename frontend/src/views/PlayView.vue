@@ -136,9 +136,11 @@ async function newGame() {
     align-items: start;
   }
 
+  /* The status bar is sticky too (8px from the top, about 73px tall), so the sidebar
+     sticks below it instead of sliding underneath. */
   .play-side {
     position: sticky;
-    top: 16px;
+    top: 96px;
   }
 }
 

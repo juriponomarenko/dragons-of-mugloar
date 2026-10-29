@@ -111,6 +111,16 @@ class GameEngineTest {
 	}
 
 	@Test
+	void rateLimitOnSolveKeepsItsStatusInsteadOfBecomingAnInvalidAction() {
+		api.solveFailures.push(new MugloarApiException(MugloarApiException.TOO_MANY_REQUESTS, "", "slow down"));
+
+		assertThatExceptionOfType(MugloarApiException.class)
+				.isThrownBy(() -> engine.solve(session, "easy", null, "", false))
+				.matches(MugloarApiException::isTooManyRequests);
+		assertThat(session.history()).isEmpty();
+	}
+
+	@Test
 	void upstreamServerErrorsPropagate() {
 		api.solveFailures.push(new MugloarApiException(503, "", "down"));
 

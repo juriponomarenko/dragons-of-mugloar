@@ -1,5 +1,6 @@
 package com.ponomarenko.mugloar.service;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import com.ponomarenko.mugloar.TestFixtures;
@@ -26,13 +27,16 @@ class AutoPlayerTest {
 
 	private GameSession session;
 
+	/** Milliseconds the player wanted to wait before each retry; nothing actually sleeps. */
+	private final List<Long> pauses = new ArrayList<>();
+
 	@BeforeEach
 	void setUp() {
 		api = new FakeMugloarApi();
 		engine = new GameEngine(api, new AdDecoder());
 		StrategyProperties props = TestFixtures.defaultStrategy();
 		GameStrategy strategy = new GameStrategy(new AdEvaluator(props), new ShoppingPolicy(props));
-		autoPlayer = new AutoPlayer(engine, strategy, props);
+		autoPlayer = new AutoPlayer(engine, strategy, props, pauses::add);
 		session = engine.start();
 	}
 
@@ -120,6 +124,29 @@ class AutoPlayerTest {
 		AutoplayOutcome outcome = autoPlayer.playToEnd(session, 2);
 
 		assertThat(outcome.turns()).hasSize(2);
+		assertThat(pauses).containsExactly(250L);
+	}
+
+	@Test
+	void rateLimitOnSolveIsWaitedOutRatherThanTreatedAsAnExpiredAd() {
+		api.solveFailures.push(new MugloarApiException(MugloarApiException.TOO_MANY_REQUESTS, "", "slow down"));
+
+		AutoplayOutcome outcome = autoPlayer.playToEnd(session, 2);
+
+		assertThat(outcome.turns()).hasSize(2);
+		assertThat(outcome.stoppedBecause()).isEqualTo("Reached the turn limit of 2");
+		assertThat(pauses).containsExactly(10_000L);
+	}
+
+	@Test
+	void rateLimitOnTheBoardIsWaitedOutTooAndTheWaitGrows() {
+		api.messageFailures.push(new MugloarApiException(MugloarApiException.TOO_MANY_REQUESTS, "", "slow down"));
+		api.messageFailures.push(new MugloarApiException(MugloarApiException.TOO_MANY_REQUESTS, "", "slow down"));
+
+		AutoplayOutcome outcome = autoPlayer.playToEnd(session, 1);
+
+		assertThat(outcome.turns()).hasSize(1);
+		assertThat(pauses).containsExactly(10_000L, 20_000L);
 	}
 
 	@Test

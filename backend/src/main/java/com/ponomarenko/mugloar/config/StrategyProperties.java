@@ -25,7 +25,8 @@ import org.springframework.validation.annotation.Validated;
  * @param lifeValue gold-equivalent cost of losing a life, used when scoring ads: the potion price plus the
  * turn it takes to buy one back
  * @param riskyKeywords words in an ad text that make it less attractive (reputation risk)
- * @param riskyKeywordPenalty multiplier applied to the score of ads containing a risky keyword
+ * @param riskyKeywordPenalty multiplier applied to the expected gold of ads containing a risky keyword, before
+ * the cost of a lost life is subtracted
  * @param maxTurns hard upper bound on turns played by the autoplayer, as a safety net
  * @param trapPhrases phrases marking ads that are known to fail whatever their label says
  * @param distrustAfterFailures once ads of one family have failed this many times in a game, the family is

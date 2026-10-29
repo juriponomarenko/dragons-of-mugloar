@@ -184,6 +184,7 @@ describe('game store', () => {
     const store = useGameStore()
     await store.startGame()
     store.setAutoplayDelay(100)
+    api.getAds.mockClear()
 
     const run = store.runAutoplay()
     expect(store.autoplay.running).toBe(true)
@@ -191,6 +192,8 @@ describe('game store', () => {
     await run
 
     expect(api.autoplayStep).toHaveBeenCalledTimes(3)
+    // the board is refreshed after each step while the game is alive; not once it is over
+    expect(api.getAds).toHaveBeenCalledTimes(2)
     expect(store.autoplay.running).toBe(false)
     expect(store.isGameOver).toBe(true)
     expect(store.game?.score).toBe(1200)
