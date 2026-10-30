@@ -33,10 +33,6 @@ public class MugloarApiException extends RuntimeException {
 		return responseBody;
 	}
 
-	public boolean isNotFound() {
-		return status == 404;
-	}
-
 	public boolean isClientError() {
 		return status >= 400 && status < 500;
 	}

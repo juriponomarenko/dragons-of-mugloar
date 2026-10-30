@@ -3,14 +3,16 @@ package com.ponomarenko.mugloar.cli;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.LongConsumer;
 
 import com.ponomarenko.mugloar.client.MugloarApiException;
+import com.ponomarenko.mugloar.config.AutoplayProperties;
 import com.ponomarenko.mugloar.service.AutoplayOutcome;
 import com.ponomarenko.mugloar.service.GameService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.ExitCodeGenerator;
@@ -20,10 +22,11 @@ import org.springframework.stereotype.Component;
 /**
  * Command-line mode: plays one or more complete games with the strategy and prints a
  * summary. Activated with the {@code autoplay} profile, e.g.
- * {@code ./mvnw spring-boot:run -Dspring-boot.run.profiles=autoplay}. The process exit code
- * is non-zero when any game finished below the target score, which makes it usable as a
- * regression check. A well-upgraded dragon never dies, so each game is capped at
- * {@code mugloar.autoplay.max-turns} actions; the server keeps the score either way.
+ * {@code ./mvnw spring-boot:run -Dspring-boot.run.profiles=autoplay}. The exit code is
+ * non-zero when any game finished below the target score (or could not be started), which
+ * makes the run usable as a regression check; {@code main} applies it when the context closes.
+ * A well-upgraded dragon can go on for hundreds of turns, so each game is capped at
+ * {@code mugloar.strategy.max-turns} actions; the server keeps the score either way.
  */
 @Component
 @Profile("autoplay")
@@ -33,29 +36,33 @@ public class AutoplayRunner implements ApplicationRunner, ExitCodeGenerator {
 
 	private static final int START_ATTEMPTS = 4;
 
-	private static final int RATE_LIMIT_PAUSE_SECONDS = 30;
+	private static final long RATE_LIMIT_PAUSE_MILLIS = 30_000L;
 
 	private final GameService gameService;
 
-	private final int games;
+	private final AutoplayProperties properties;
 
-	private final int targetScore;
-
-	private final int maxTurns;
+	/** Sleeps for the given number of milliseconds while the API asks us to slow down. */
+	private final LongConsumer pause;
 
 	private int exitCode;
 
-	public AutoplayRunner(GameService gameService, @Value("${mugloar.autoplay.games:1}") int games,
-			@Value("${mugloar.autoplay.target-score:1000}") int targetScore,
-			@Value("${mugloar.autoplay.max-turns:1000}") int maxTurns) {
+	@Autowired
+	public AutoplayRunner(GameService gameService, AutoplayProperties properties) {
+		this(gameService, properties, AutoplayRunner::sleep);
+	}
+
+	/** Lets tests observe the pauses instead of waiting them out. */
+	AutoplayRunner(GameService gameService, AutoplayProperties properties, LongConsumer pause) {
 		this.gameService = gameService;
-		this.games = games;
-		this.targetScore = targetScore;
-		this.maxTurns = maxTurns;
+		this.properties = properties;
+		this.pause = pause;
 	}
 
 	@Override
 	public void run(ApplicationArguments args) {
+		int games = properties.games();
+		int targetScore = properties.targetScore();
 		List<AutoplayOutcome> outcomes = new ArrayList<>();
 		for (int i = 1; i <= games; i++) {
 			AutoplayOutcome outcome = playWithPatience(i);
@@ -83,25 +90,26 @@ public class AutoplayRunner implements ApplicationRunner, ExitCodeGenerator {
 	private AutoplayOutcome playWithPatience(int number) {
 		for (int attempt = 1; attempt <= START_ATTEMPTS; attempt++) {
 			try {
-				return gameService.playNewGame(maxTurns);
+				// No bound of its own: the strategy's max-turns cap applies.
+				return gameService.playNewGame(Integer.MAX_VALUE);
 			}
 			catch (MugloarApiException ex) {
 				if (!ex.isTooManyRequests() || attempt == START_ATTEMPTS) {
-					System.out.printf(Locale.ROOT, "Game %d/%d  could not be started: %s%n", number, games,
+					System.out.printf(Locale.ROOT, "Game %d/%d  could not be started: %s%n", number, properties.games(),
 							ex.getMessage());
 					return null;
 				}
 				log.info("Rate limited while starting game {}; waiting {} s before trying again", number,
-						RATE_LIMIT_PAUSE_SECONDS);
-				sleepSeconds(RATE_LIMIT_PAUSE_SECONDS);
+						RATE_LIMIT_PAUSE_MILLIS / 1000);
+				pause.accept(RATE_LIMIT_PAUSE_MILLIS);
 			}
 		}
 		return null;
 	}
 
-	private static void sleepSeconds(int seconds) {
+	private static void sleep(long millis) {
 		try {
-			Thread.sleep(seconds * 1000L);
+			Thread.sleep(millis);
 		}
 		catch (InterruptedException ex) {
 			Thread.currentThread().interrupt();

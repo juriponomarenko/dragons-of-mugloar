@@ -27,7 +27,8 @@ import org.springframework.validation.annotation.Validated;
  * @param riskyKeywords words in an ad text that make it less attractive (reputation risk)
  * @param riskyKeywordPenalty multiplier applied to the expected gold of ads containing a risky keyword, before
  * the cost of a lost life is subtracted
- * @param maxTurns hard upper bound on turns played by the autoplayer, as a safety net
+ * @param maxTurns hard upper bound on the actions the autoplayer takes in one game, from the CLI or the UI; a
+ * well-upgraded dragon can go on for hundreds of turns, so a run has to stop somewhere
  * @param trapPhrases phrases marking ads that are known to fail whatever their label says
  * @param distrustAfterFailures once ads of one family have failed this many times in a game, the family is
  * treated as a certain failure for the rest of that game
@@ -46,7 +47,7 @@ public record StrategyProperties(
 		@Min(0) @DefaultValue("100") int lifeValue,
 		@DefaultValue({ "steal", "kidnap", "assassinate", "infiltrate", "kill" }) List<String> riskyKeywords,
 		@DecimalMin("0") @DecimalMax("1") @DefaultValue("0.6") double riskyKeywordPenalty,
-		@Min(1) @DefaultValue("5000") int maxTurns,
+		@Min(1) @DefaultValue("1000") int maxTurns,
 		@DefaultValue({ "super awesome diamond" }) List<String> trapPhrases,
 		@Min(1) @DefaultValue("2") int distrustAfterFailures) {
 

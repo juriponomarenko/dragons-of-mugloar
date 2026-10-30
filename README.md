@@ -38,7 +38,7 @@ Open <http://localhost:5173>, press **Start a new game**, and either pick ads yo
 ## Prerequisites
 
 - JDK 21 (e.g. [Eclipse Temurin](https://adoptium.net/)); `JAVA_HOME` must point to it for the Maven wrapper.
-- Node.js 24+ (tested on 24 and 26) and [pnpm](https://pnpm.io/) 10+
+- Node.js 22.18+ or 24+ (tested on 24 and 26) and [pnpm](https://pnpm.io/) 10+
 - No global Maven needed: the project ships the Maven wrapper (`mvnw`, `mvnw.cmd` on Windows).
 
 ## Running the backend
@@ -59,7 +59,7 @@ cd backend
 
 ### Playing a game from the command line
 
-The `autoplay` profile starts no web server; it plays one or more games with the built‑in strategy, prints a summary and exits with a non‑zero code if any game ended below 1000 points. A well‑upgraded dragon never dies, so each game stops after `mugloar.autoplay.max-turns` actions (default 1000); the server keeps the score either way:
+The `autoplay` profile starts no web server; it plays one or more games with the built‑in strategy, prints a summary and exits with a non‑zero code if any game ended below 1000 points. A well‑upgraded dragon can go on for hundreds of turns, so each game stops after `mugloar.strategy.max-turns` actions (default 1000, the same cap the UI's *Finish game* uses); the server keeps the score either way:
 
 ```bash
 cd backend
@@ -109,7 +109,7 @@ Every turn the strategy makes one decision, in this order:
 
 Ads are scored as `successRate × reward − (1 − successRate) × lifeCost`, where a life is valued at 100 gold (the potion plus the turn it takes to buy it back), the success rate is an assumed mapping of the game's textual labels ("Sure thing" = 1.0 … "Impossible" = 0; the game never exposes numbers, and these are not rates measured by this project) and the cost of a life grows as lives run out. Ads whose text suggests a reputation hit (stealing, kidnapping, …) have their expected gold discounted before the life cost is subtracted, so the penalty can only ever lower a score. An ad is only *eligible* when its success rate clears a threshold that tightens with fewer lives (60% at three or more lives, so a *Gamble* is never taken at full health; 80% at one life). A life that cannot be replaced counts for one more: when a healing potion is not affordable, ads are judged as if one life fewer remained. If nothing on the board is eligible the strategy prefers buying a potion (which rolls the board over) and only as a last resort attempts the least dangerous ad.
 
-**Labels can lie.** Dumping the history of games that died early showed the same pattern every time: from about turn 25 the board offers "Steal super awesome diamond …" ads labelled *Sure thing* with rewards of 300+ gold, and they fail every single time (nine of nine in the game below). Discounting the reward for the word "steal" is not enough, because 60% of 322 still beats every honest ad. Two rules handle this. Ads matching a configured trap phrase (default `super awesome diamond`) are estimated at 0% whatever the label says. And the player learns within a game: ads are grouped into families by their first four words, and once a family has failed twice (configurable) it is treated as a certain failure for the rest of that game, so an unknown trap costs at most two lives. Both show up as notes on the ad in the UI.
+**Labels can lie.** Dumping the history of games that died early showed the same pattern every time: from about turn 25 the board offers "Steal super awesome diamond …" ads labelled *Sure thing* with rewards of 300+ gold, and they fail every single time (nine of nine in the game below). Discounting the reward for the word "steal" is not enough, because 60% of 322 still beats every honest ad. Two rules handle this. Ads matching a configured trap phrase (default `super awesome diamond`) are estimated at 0% whatever the label says. And the player learns within a game: ads are grouped into families by the kind of task they are (the first words of the text with names and places skipped, so "Escort Majda Strange to thrift shoppe" and "Escort Bob Hope to meadow" are one family) together with their label, and once a family has failed twice (configurable) it is treated as a certain failure for the rest of that game, so an unknown trap costs at most two lives. The label is part of the key so that two failed *Hmmm* ads never discredit the *Piece of cake* ads of the same kind. Both show up as notes on the ad in the UI.
 
 ```text
  25 XX  L3 g 192 lv  6 sc  892 | Steal super awesome diamond pan from Kassiopeia Clemens | Best eligible ad: Sure thing, reward 228
@@ -127,11 +127,13 @@ Everything above is tunable through `mugloar.strategy.*` properties (see `Strate
 ### Error handling and validation
 
 - Path variables are validated against a strict id pattern before anything is forwarded upstream; request bodies are bean‑validated.
-- Every failure is returned as an RFC 9457 problem document: `400` invalid input, `404` unknown game, `409` game over, `422` action not possible (expired ad, unaffordable item), `502`/`503` upstream API failure.
+- Every failure is returned as an RFC 9457 problem document: `400` invalid input, `404` unknown game, `409` game over, `422` action not possible (expired ad, unaffordable item, nothing left to do on an empty board), `502`/`503` upstream API failure.
 - Unaffordable or unknown purchases are refused locally, because the game charges a turn even for a failed purchase.
-- The autoplayer tolerates transient upstream errors and expired ads (it refreshes the board and retries, waiting 10, 20 and 30 seconds when the API answers HTTP 429, since a strong dragon makes around ten requests a second) and gives up after three consecutive failures instead of looping forever. The CLI waits out a rate limit on game start and reports a game it could not start rather than aborting the run.
-- Upstream HTTP 410 ("Game Over") closes the session even if local bookkeeping disagrees.
-- Each game session is guarded by a lock so a manual click and an autoplay request cannot interleave.
+- The autoplayer tolerates transient upstream errors and expired ads: it refreshes the board and retries, and gives up after three consecutive failures instead of looping forever.
+- A rate limit is treated differently. A strong dragon makes around ten requests a second and the API answers HTTP 429 after roughly six hundred of them (about turn 300), so the player waits it out rather than counting it as a failure: 15, 30, 45 and then 60 seconds at a time, for up to six waits in a row. The CLI waits out a rate limit on game start too, and reports a game it could not start rather than aborting the run.
+- Upstream HTTP 410 ("Game Over") closes the session even if local bookkeeping disagrees; an autoplay run that hits it ends cleanly with that reason instead of failing.
+- Each action on a game runs under that game's lock, so a manual click and an autoplay request cannot interleave. Reads never wait for it: state, history, purchases and the board are immutable snapshots swapped atomically, so the UI can follow a game the server is playing.
+- The CLI's exit code is non‑zero when any game missed the target or could not be started, and `main` applies it when the context closes, so the run works as a regression check in a shell or CI.
 
 ### REST API
 
@@ -147,7 +149,7 @@ Everything above is tunable through `mugloar.strategy.*` properties (see `Strate
 | `POST` | `/api/games/{id}/reputation` | Investigate reputation |
 | `POST` | `/api/games/{id}/autoplay/step` | Let the strategy take one action |
 | `POST` | `/api/games/{id}/autoplay` | Let the strategy play to the end (optional body `{"maxTurns": n}`) |
-| `GET` | `/api/games/{id}/history` | Every action taken in the game, with the strategy's reasoning |
+| `GET` | `/api/games/{id}/history` | Every action taken in the game, with the strategy's reasoning and the state and purchases as they stood after it |
 
 ### Tests
 
@@ -155,18 +157,21 @@ Everything above is tunable through `mugloar.strategy.*` properties (see `Strate
 
 ### Results
 
-Measured against the live API with the CLI autoplayer. Later rows are later versions of the strategy; the 28 Oct runs are 10 games each, capped at 500 actions per game.
+Measured against the live API with the CLI autoplayer. Later rows are later versions of the strategy; the 28 and 30 Oct runs are 10 games each, capped at 500 actions per game.
 
 | Strategy version | Games | Min | Avg | Max | Reached 1000+ |
 | --- | --- | --- | --- | --- | --- |
 | 27 Oct: potion at ≤3 lives, 100 gold reserve, first affordable upgrade rebought | 5 | 3348 | 4216 | 5259 | 5/5 |
 | 28 Oct: upgrade ladder, penalty fix | 10 | 492 | 6162 | 11951 | 8/10 |
 | 28 Oct: + life valued at 100 gold, no *Gamble* at full health | 10 | 954 | 8680 | 27864 | 9/10 |
-| **28 Oct: + trap phrases and per-game distrust (current default)** | 10 | 3917 | 9387 | 20293 | **10/10** |
+| 28 Oct: + trap phrases and per-game distrust | 10 | 3917 | 9387 | 20293 | 10/10 |
+| **30 Oct: + ad families keyed by task and label (current default)** | 10 | 4581 | 14797 | 43739 | **10/10** |
 
 What the rows say: climbing the upgrade ladder roughly doubled the average and the ceiling (a dragon at level 100+ is handed easy ads worth hundreds of gold), but it exposed a failure mode the first version had merely been lucky about. Every lost game, in every version, died between turns 29 and 48 at level 2 to 9, and the history dumps all showed the same "Sure thing" trap ads failing in a row. Recognising the trap phrase and distrusting any ad family that fails twice removed those deaths; the more cautious life valuation is kept because it costs nothing late in the game, when rewards dwarf the life cost.
 
-The samples are small and scores vary a lot from run to run (the same strategy produced 3917 and 20293 in one batch), so treat the averages as indicative. The floor is the number that matters for the task, and every knob in the table is a `mugloar.strategy.*` property, so each row can be reproduced.
+The 30 Oct run also showed two things worth knowing: a level‑298 dragon did die at turn 321, so "never dies" is too strong, and the best game (level 326, 43739 points) was cut short at turn 297 by the API's rate limit, which the 10/20/30‑second waits of that version could not outlast; the longer, non‑counting waits described above are the result.
+
+The samples are small and scores vary a lot from run to run (the same strategy produced 4581 and 43739 in one batch), so treat the averages as indicative. The floor is the number that matters for the task, and every knob in the table is a `mugloar.strategy.*` property, so each row can be reproduced.
 
 ## Frontend
 
@@ -185,7 +190,7 @@ src/utils/       Formatting helpers
 - **Status bar** with lives (hearts turn amber/red as they run out), gold, score, level and turn, sticky at the top on every screen size.
 - **Message board** with every ad decoded and assessed by the backend: success chance meter, expected value, advisor score, risk badge, expiry, and notes such as "May hurt reputation" or "Decoded from base64". The best eligible ad is marked **Recommended**; ads outside the current risk budget are dimmed. Sort by advisor score, reward, chance or urgency, or hide risky ads entirely.
 - **Shop** showing what is affordable, how many times each item was bought, and the item the strategy would buy now. Unaffordable items are disabled, so no turn is wasted on a failed purchase.
-- **Advisor panel**: play one turn, run autoplay turn by turn with an adjustable pause (the board refreshes after every step, so you can watch the reasoning), stop at any time, or hand the rest of the game to the server.
+- **Advisor panel**: play one turn, run autoplay turn by turn with an adjustable pause (the board refreshes after every step, so you can watch the reasoning), stop at any time, or hand the rest of the game to the server. A server run that stops before the game is over says why in an info banner.
 - **History** of every action with the outcome, the API's message and, for advisor moves, the reason it was chosen.
 - **Reputation** on demand, a game‑over banner that says whether the 1000‑point target was met, and a toast after each action.
 - The last game id is remembered in `localStorage`, so a refresh or the "Resume last game" button brings you back.

@@ -1,6 +1,7 @@
 package com.ponomarenko.mugloar.service;
 
 import java.util.List;
+import java.util.Map;
 
 import com.ponomarenko.mugloar.TestFixtures;
 import com.ponomarenko.mugloar.config.StrategyProperties;
@@ -86,6 +87,22 @@ class GameServiceTest {
 
 		assertThat(solve.automated()).isFalse();
 		assertThat(service.history(session.gameId())).containsExactly(solve);
+	}
+
+	@Test
+	void historyRemembersWhatHadBeenBoughtAfterEachTurn() {
+		api.gold = 150;
+		GameSession session = service.startGame();
+
+		service.buy(session.gameId(), "cs");
+		service.solve(session.gameId(), "easy");
+		service.buy(session.gameId(), "hpot");
+
+		List<TurnRecord> history = service.history(session.gameId());
+		assertThat(history.get(0).purchasesAfter()).containsExactlyEntriesOf(Map.of("cs", 1));
+		assertThat(history.get(1).purchasesAfter()).containsExactlyEntriesOf(Map.of("cs", 1));
+		assertThat(history.get(2).purchasesAfter()).containsOnlyKeys("cs", "hpot");
+		assertThat(session.purchases()).containsOnlyKeys("cs", "hpot");
 	}
 
 	@Test

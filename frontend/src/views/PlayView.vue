@@ -44,6 +44,7 @@ async function newGame() {
     <StatusBar :game="store.game" :loading="store.loading.action" />
 
     <ErrorBanner :message="store.error" :details="store.errorDetails" @dismiss="store.clearError" />
+    <ErrorBanner :message="store.notice" tone="info" @dismiss="store.clearNotice" />
 
     <GameOverBanner
       v-if="store.isGameOver"

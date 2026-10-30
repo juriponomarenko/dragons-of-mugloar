@@ -46,6 +46,8 @@ class FakeMugloarApi implements MugloarApiClient {
 
 	final Deque<RuntimeException> messageFailures = new ArrayDeque<>();
 
+	final Deque<RuntimeException> shopFailures = new ArrayDeque<>();
+
 	final List<String> solvedAdIds = new ArrayList<>();
 
 	final List<String> boughtItemIds = new ArrayList<>();
@@ -89,6 +91,9 @@ class FakeMugloarApi implements MugloarApiClient {
 	@Override
 	public List<ShopItemDto> getShop(String gameId) {
 		shopRequests++;
+		if (!shopFailures.isEmpty()) {
+			throw shopFailures.pop();
+		}
 		return shop;
 	}
 

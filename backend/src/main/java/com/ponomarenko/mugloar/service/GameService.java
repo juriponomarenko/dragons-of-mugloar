@@ -14,8 +14,8 @@ import com.ponomarenko.mugloar.strategy.ShoppingPolicy;
 import org.springframework.stereotype.Service;
 
 /**
- * Application facade used by the REST layer and the CLI. Every operation on an existing game
- * runs under that game's session lock.
+ * Application facade used by the REST layer and the CLI. Every action on an existing game runs
+ * under that game's session lock; reads do not, so the UI can follow a game the server is playing.
  */
 @Service
 public class GameService {
@@ -54,28 +54,24 @@ public class GameService {
 	/** Current ads, decoded and ranked by the strategy (best first). */
 	public List<AdAssessment> getAds(String gameId) {
 		GameSession session = registry.require(gameId);
-		return session.locked(() -> {
-			List<Ad> ads = engine.fetchAds(session);
-			return adEvaluator.evaluate(ads, session.state(), engine.fetchShop(session), session.failedFamilies());
-		});
+		List<Ad> ads = engine.fetchAds(session);
+		return adEvaluator.evaluate(ads, session.state(), engine.fetchShop(session), session.failedFamilies());
 	}
 
 	public List<ShopOffer> getShop(String gameId) {
 		GameSession session = registry.require(gameId);
-		return session.locked(() -> {
-			List<ShopItem> shop = engine.fetchShop(session);
-			GameState state = session.state();
-			Map<String, Integer> purchases = session.purchases();
-			return shop.stream()
-					.map(item -> new ShopOffer(item, state.gold() >= item.cost(), purchases.getOrDefault(item.id(), 0),
-							!state.isOver() && shoppingPolicy.isSuggested(item, state, shop, purchases)))
-					.toList();
-		});
+		List<ShopItem> shop = engine.fetchShop(session);
+		GameState state = session.state();
+		Map<String, Integer> purchases = session.purchases();
+		return shop.stream()
+				.map(item -> new ShopOffer(item, state.gold() >= item.cost(), purchases.getOrDefault(item.id(), 0),
+						!state.isOver() && shoppingPolicy.isSuggested(item, state, shop, purchases)))
+				.toList();
 	}
 
 	public TurnRecord solve(String gameId, String adId) {
 		GameSession session = registry.require(gameId);
-		return session.locked(() -> engine.solve(session, adId, null, "", false));
+		return session.locked(() -> engine.solve(session, adId, "", false));
 	}
 
 	public TurnRecord buy(String gameId, String itemId) {

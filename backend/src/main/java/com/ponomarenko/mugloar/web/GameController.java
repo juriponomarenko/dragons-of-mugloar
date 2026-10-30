@@ -98,7 +98,8 @@ public class GameController {
 	@PostMapping("/{gameId}/autoplay")
 	public AutoplayView autoplay(@PathVariable @Pattern(regexp = ID_PATTERN, message = ID_MESSAGE) String gameId,
 			@RequestBody(required = false) @Valid AutoplayRequest request) {
-		int maxTurns = request != null ? request.maxTurnsOrDefault() : AutoplayRequest.DEFAULT_MAX_TURNS;
+		// No bound of its own unless the body gives one: the strategy's max-turns cap always applies.
+		int maxTurns = request != null ? request.maxTurnsOr(Integer.MAX_VALUE) : Integer.MAX_VALUE;
 		AutoplayOutcome outcome = gameService.autoplay(gameId, maxTurns);
 		return ViewMapper.autoplay(outcome, gameService.getGame(gameId));
 	}

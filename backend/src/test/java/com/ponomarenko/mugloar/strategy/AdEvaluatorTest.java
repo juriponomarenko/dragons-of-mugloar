@@ -137,15 +137,15 @@ class AdEvaluatorTest {
 		Ad gamble = ad("gamble", Probability.GAMBLE, 100);
 
 		// 3 lives: a gamble is eligible, unless the 50-gold potion is out of reach
-		assertThat(evaluator.evaluate(List.of(gamble), state(3, 50), SHOP).get(0).eligible()).isTrue();
-		AdAssessment broke = evaluator.evaluate(List.of(gamble), state(3, 49), SHOP).get(0);
+		assertThat(evaluator.evaluate(List.of(gamble), state(3, 50), SHOP, Map.of()).get(0).eligible()).isTrue();
+		AdAssessment broke = evaluator.evaluate(List.of(gamble), state(3, 49), SHOP, Map.of()).get(0);
 		assertThat(broke.eligible()).isFalse();
 		assertThat(broke.notes()).contains("Below 60% success threshold for 3 lives (no gold for a potion)");
 		// a shop without a potion changes nothing
 		List<ShopItem> noPotion = SHOP.stream().filter(i -> !i.equals(POTION)).toList();
-		assertThat(evaluator.evaluate(List.of(gamble), state(3, 0), noPotion).get(0).eligible()).isTrue();
+		assertThat(evaluator.evaluate(List.of(gamble), state(3, 0), noPotion, Map.of()).get(0).eligible()).isTrue();
 		// one life never becomes zero
-		assertThat(evaluator.evaluate(List.of(ad("sure", Probability.QUITE_LIKELY, 100)), state(1, 0), SHOP).get(0)
+		assertThat(evaluator.evaluate(List.of(ad("sure", Probability.QUITE_LIKELY, 100)), state(1, 0), SHOP, Map.of()).get(0)
 				.eligible()).isTrue();
 	}
 
@@ -168,35 +168,44 @@ class AdEvaluatorTest {
 	void anAdFamilyThatKeepsFailingIsDistrustedForTheRestOfTheGame() {
 		Ad suspicious = ad("s", "Escort Babette Barnard to field in Oldcawl", Probability.SURE_THING, 100);
 
-		assertThat(evaluator.evaluate(List.of(suspicious), state(3, 0), SHOP, Map.of("escort babette barnard to", 1))
+		assertThat(evaluator.evaluate(List.of(suspicious), state(3, 0), SHOP, Map.of("escort to field in|sure_thing", 1))
 				.get(0).eligible()).isTrue();
 		AdAssessment distrusted = evaluator
-				.evaluate(List.of(suspicious), state(3, 0), SHOP, Map.of("escort babette barnard to", 2)).get(0);
+				.evaluate(List.of(suspicious), state(3, 0), SHOP, Map.of("escort to field in|sure_thing", 2)).get(0);
 		assertThat(distrusted.eligible()).isFalse();
 		assertThat(distrusted.successRate()).isZero();
 		assertThat(distrusted.notes()).contains("Ads like this have failed 2 times this game");
 	}
 
 	@Test
-	void adFamilyIsTheFirstFewWordsNormalised() {
-		assertThat(Ad.family("Steal super awesome diamond pan from Kassiopeia Clemens"))
-				.isEqualTo("steal super awesome diamond");
-		assertThat(Ad.family("Steal super awesome diamond cat from Cuthberht Hudnall"))
-				.isEqualTo("steal super awesome diamond");
-		assertThat(Ad.family("  Help   Bob, fix his fence! ")).isEqualTo("help bob fix his");
-		assertThat(Ad.family("Rescue")).isEqualTo("rescue");
-		assertThat(Ad.family(null)).isEmpty();
+	void adFamilyIgnoresNamesAndIncludesTheLabel() {
+		assertThat(Ad.family("Steal super awesome diamond pan from Kassiopeia Clemens", Probability.SURE_THING))
+				.isEqualTo("steal super awesome diamond|sure_thing");
+		assertThat(Ad.family("Steal super awesome diamond cat from Cuthberht Hudnall", Probability.SURE_THING))
+				.isEqualTo("steal super awesome diamond|sure_thing");
+		assertThat(Ad.family("Escort Majda Strange to thrift shoppe in Fallchester", Probability.PIECE_OF_CAKE))
+				.isEqualTo("escort to thrift shoppe|piece_of_cake");
+		assertThat(Ad.family("Help Thais Fairchild to reach an agreement with Ainsley", Probability.PIECE_OF_CAKE))
+				.isEqualTo("help to reach an|piece_of_cake");
+		assertThat(Ad.family("Create an advertisement campaign for Fabian Mathews", Probability.HMMM))
+				.isNotEqualTo(Ad.family("Create an advertisement campaign for Greger Leonard", Probability.PIECE_OF_CAKE));
+		assertThat(Ad.family("  Help   Bob, fix his fence! ", Probability.SURE_THING))
+				.isEqualTo("help fix his fence|sure_thing");
+		assertThat(Ad.family("Rescue", Probability.GAMBLE)).isEqualTo("rescue|gamble");
+		assertThat(Ad.family(null, Probability.GAMBLE)).isEmpty();
 	}
 
 	@Test
-	void pickBestReturnsHighestScoringEligibleAd() {
+	void theFirstEligibleAdInTheRankingIsTheOneToTake() {
 		List<Ad> ads = List.of(
 				ad("tempting", Probability.SUICIDE_MISSION, 9999),
 				ad("sensible", Probability.WALK_IN_THE_PARK, 50),
 				ad("meh", Probability.SURE_THING, 5));
 
-		assertThat(evaluator.pickBest(ads, state(3, 0))).get().extracting(a -> a.ad().adId()).isEqualTo("sensible");
-		assertThat(evaluator.pickBest(List.of(ad("imp", Probability.IMPOSSIBLE, 10)), state(3, 0))).isEmpty();
+		assertThat(evaluator.evaluate(ads, state(3, 0)).stream().filter(AdAssessment::eligible).findFirst())
+				.get().extracting(a -> a.ad().adId()).isEqualTo("sensible");
+		assertThat(evaluator.evaluate(List.of(ad("imp", Probability.IMPOSSIBLE, 10)), state(3, 0)))
+				.noneMatch(AdAssessment::eligible);
 	}
 
 	@Test

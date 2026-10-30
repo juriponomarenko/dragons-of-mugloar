@@ -59,7 +59,8 @@ class GameEngineTest {
 
 	@Test
 	void successfulSolveUpdatesStateAndHistory() {
-		TurnRecord record = engine.solve(session, "easy", "Help a neighbour", "because", true);
+		engine.fetchAds(session); // the ad text and family come from the board
+		TurnRecord record = engine.solve(session, "easy", "because", true);
 
 		assertThat(record.action()).isEqualTo(ActionType.SOLVE);
 		assertThat(record.success()).isTrue();
@@ -77,7 +78,7 @@ class GameEngineTest {
 	void manualSolveIsDescribedFromTheLastFetchedBoard() {
 		engine.fetchAds(session);
 
-		TurnRecord record = engine.solve(session, "easy", null, "", false);
+		TurnRecord record = engine.solve(session, "easy", "", false);
 
 		assertThat(record.description()).isEqualTo("Help a neighbour");
 		assertThat(record.automated()).isFalse();
@@ -85,27 +86,41 @@ class GameEngineTest {
 
 	@Test
 	void manualSolveFallsBackToTheAdIdWhenTheBoardIsUnknown() {
-		TurnRecord record = engine.solve(session, "easy", null, "", false);
+		TurnRecord record = engine.solve(session, "easy", "", false);
 
 		assertThat(record.description()).isEqualTo("easy");
 	}
 
 	@Test
 	void failedSolveCostsALifeAndIsRememberedByAdFamily() {
-		TurnRecord record = engine.solve(session, "hard", "Steal super awesome diamond pan from Bob", "", false);
+		api.board = () -> List.of(
+				new AdDto("trap1", "Steal super awesome diamond pan from Bob", "300", 5, null, "Impossible"),
+				new AdDto("trap2", "Steal super awesome diamond cat from Alice", "300", 5, null, "Impossible"));
+		engine.fetchAds(session);
+
+		TurnRecord record = engine.solve(session, "trap1", "", false);
 
 		assertThat(record.success()).isFalse();
 		assertThat(record.stateAfter().lives()).isEqualTo(2);
-		assertThat(session.failedFamilies()).containsEntry("steal super awesome diamond", 1);
+		assertThat(record.family()).isEqualTo("steal super awesome diamond|impossible");
+		assertThat(session.failedFamilies()).containsEntry("steal super awesome diamond|impossible", 1);
 
-		engine.solve(session, "hard", "Steal super awesome diamond cat from Alice", "", false);
-		assertThat(session.failedFamilies()).containsEntry("steal super awesome diamond", 2);
+		engine.solve(session, "trap2", "", false);
+		assertThat(session.failedFamilies()).containsEntry("steal super awesome diamond|impossible", 2);
+	}
+
+	@Test
+	void gameOverOnTheShopClosesTheSessionToo() {
+		api.shopFailures.push(new MugloarApiException(410, "{\"status\":\"Game Over\"}", "gone"));
+
+		assertThatExceptionOfType(GameOverException.class).isThrownBy(() -> engine.fetchShop(session));
+		assertThat(session.isOver()).isTrue();
 	}
 
 	@Test
 	void solvingAnUnknownOrExpiredAdIsAnInvalidAction() {
 		assertThatExceptionOfType(InvalidActionException.class)
-				.isThrownBy(() -> engine.solve(session, "gone", null, "", false))
+				.isThrownBy(() -> engine.solve(session, "gone", "", false))
 				.withMessageContaining("expired or does not exist");
 		assertThat(session.history()).isEmpty();
 	}
@@ -115,7 +130,7 @@ class GameEngineTest {
 		api.solveFailures.push(new MugloarApiException(MugloarApiException.TOO_MANY_REQUESTS, "", "slow down"));
 
 		assertThatExceptionOfType(MugloarApiException.class)
-				.isThrownBy(() -> engine.solve(session, "easy", null, "", false))
+				.isThrownBy(() -> engine.solve(session, "easy", "", false))
 				.matches(MugloarApiException::isTooManyRequests);
 		assertThat(session.history()).isEmpty();
 	}
@@ -124,7 +139,7 @@ class GameEngineTest {
 	void upstreamServerErrorsPropagate() {
 		api.solveFailures.push(new MugloarApiException(503, "", "down"));
 
-		assertThatThrownBy(() -> engine.solve(session, "easy", null, "", false))
+		assertThatThrownBy(() -> engine.solve(session, "easy", "", false))
 				.isInstanceOf(MugloarApiException.class);
 	}
 
@@ -158,20 +173,19 @@ class GameEngineTest {
 		assertThat(record.message()).isEqualTo("Bought Claw Sharpening");
 		assertThat(record.stateAfter().gold()).isEqualTo(20);
 		assertThat(record.stateAfter().level()).isEqualTo(1);
-		assertThat(session.ownedItemIds()).containsExactly("cs");
 		assertThat(session.purchases()).containsEntry("cs", 1);
 	}
 
 	@Test
 	void actionsOnAFinishedGameAreRejected() {
-		engine.solve(session, "hard", null, "", false);
-		engine.solve(session, "hard", null, "", false);
-		engine.solve(session, "hard", null, "", false);
+		engine.solve(session, "hard", "", false);
+		engine.solve(session, "hard", "", false);
+		engine.solve(session, "hard", "", false);
 		assertThat(session.isOver()).isTrue();
 
 		assertThatExceptionOfType(GameOverException.class).isThrownBy(() -> engine.fetchAds(session));
 		assertThatExceptionOfType(GameOverException.class)
-				.isThrownBy(() -> engine.solve(session, "easy", null, "", false));
+				.isThrownBy(() -> engine.solve(session, "easy", "", false));
 		assertThatExceptionOfType(GameOverException.class).isThrownBy(() -> engine.buy(session, "hpot", "", false));
 		assertThatExceptionOfType(GameOverException.class).isThrownBy(() -> engine.investigate(session));
 	}
@@ -181,7 +195,7 @@ class GameEngineTest {
 		api.solveFailures.push(new MugloarApiException(410, "{\"status\":\"Game Over\"}", "gone"));
 
 		assertThatExceptionOfType(GameOverException.class)
-				.isThrownBy(() -> engine.solve(session, "easy", null, "", false));
+				.isThrownBy(() -> engine.solve(session, "easy", "", false));
 		assertThat(session.isOver()).isTrue();
 		assertThat(session.state().lives()).isZero();
 		assertThatExceptionOfType(GameOverException.class).isThrownBy(() -> engine.fetchAds(session));

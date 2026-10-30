@@ -2,6 +2,7 @@ package com.ponomarenko.mugloar.web;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 import com.ponomarenko.mugloar.client.MugloarApiException;
 import com.ponomarenko.mugloar.domain.Ad;
@@ -20,6 +21,7 @@ import com.ponomarenko.mugloar.service.InvalidActionException;
 import com.ponomarenko.mugloar.service.ShopOffer;
 import com.ponomarenko.mugloar.service.TurnRecord;
 import com.ponomarenko.mugloar.strategy.AdAssessment;
+import com.ponomarenko.mugloar.strategy.NoMoveAvailableException;
 import com.ponomarenko.mugloar.strategy.RiskLevel;
 import org.junit.jupiter.api.Test;
 
@@ -58,8 +60,8 @@ class GameControllerTest {
 	}
 
 	private static TurnRecord turn(boolean automated) {
-		return new TurnRecord(1, ActionType.SOLVE, "a1", "Help someone", true, "Solved", "reason", automated, STATE,
-				Instant.parse("2026-10-27T10:00:00Z"));
+		return new TurnRecord(1, ActionType.SOLVE, "a1", "Help someone", "help someone|sure_thing", true, "Solved",
+				"reason", automated, STATE, Map.of(), Instant.parse("2026-10-27T10:00:00Z"));
 	}
 
 	@Test
@@ -202,7 +204,7 @@ class GameControllerTest {
 
 	@Test
 	void autoplayAcceptsOptionalBodyAndValidatesIt() throws Exception {
-		when(gameService.autoplay(eq("g1"), eq(5000))).thenReturn(new AutoplayOutcome(STATE, List.of(turn(true)), true, "Game over"));
+		when(gameService.autoplay(eq("g1"), eq(Integer.MAX_VALUE))).thenReturn(new AutoplayOutcome(STATE, List.of(turn(true)), true, "Game over"));
 		when(gameService.autoplay(eq("g1"), eq(10))).thenReturn(new AutoplayOutcome(STATE, List.of(), false, "Reached the turn limit of 10"));
 		when(gameService.getGame("g1")).thenReturn(session());
 
@@ -219,6 +221,17 @@ class GameControllerTest {
 		mockMvc.perform(post("/api/games/g1/autoplay").contentType(MediaType.APPLICATION_JSON).content("{\"maxTurns\":0}"))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.errors", hasItem("maxTurns: must be greater than or equal to 1")));
+	}
+
+	@Test
+	void noPossibleMoveIsA422Problem() throws Exception {
+		when(gameService.autoplayStep("g1"))
+				.thenThrow(new NoMoveAvailableException("No ads available and nothing affordable to buy"));
+
+		mockMvc.perform(post("/api/games/g1/autoplay/step"))
+				.andExpect(status().isUnprocessableEntity())
+				.andExpect(jsonPath("$.title").value("Action not possible"))
+				.andExpect(jsonPath("$.detail").value("No ads available and nothing affordable to buy"));
 	}
 
 	@Test

@@ -5,7 +5,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Locale;
-import java.util.Optional;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -54,11 +53,6 @@ public class AdEvaluator {
 		return evaluate(ads, state, List.of(), Map.of());
 	}
 
-	/** Evaluates all ads knowing the shop but with no history yet. */
-	public List<AdAssessment> evaluate(List<Ad> ads, GameState state, List<ShopItem> shop) {
-		return evaluate(ads, state, shop, Map.of());
-	}
-
 	/**
 	 * Evaluates all ads and returns them ordered best first. The shop tells whether a healing
 	 * potion is affordable right now; when it is not, a lost life cannot be replaced, so the
@@ -79,11 +73,6 @@ public class AdEvaluator {
 		assessments.sort(Comparator.comparingDouble(AdAssessment::score).reversed()
 				.thenComparing(a -> a.ad().expiresIn()));
 		return assessments;
-	}
-
-	/** The best eligible ad, if any. */
-	public Optional<AdAssessment> pickBest(List<Ad> ads, GameState state) {
-		return evaluate(ads, state).stream().filter(AdAssessment::eligible).findFirst();
 	}
 
 	AdAssessment assess(Ad ad, GameState state) {

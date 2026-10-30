@@ -56,7 +56,7 @@ final class ViewMapper {
 	static TurnView turn(TurnRecord record, GameSession session) {
 		return new TurnView(record.turn(), record.action().name(), record.targetId(), record.description(),
 				record.success(), record.message(), record.reason(), record.automated(),
-				game(record.stateAfter(), session.purchases(), session.createdAt()), record.at());
+				game(record.stateAfter(), record.purchasesAfter(), session.createdAt()), record.at());
 	}
 
 	static AutoplayView autoplay(AutoplayOutcome outcome, GameSession session) {

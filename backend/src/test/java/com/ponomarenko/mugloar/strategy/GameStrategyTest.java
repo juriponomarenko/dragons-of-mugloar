@@ -14,7 +14,7 @@ import static com.ponomarenko.mugloar.TestFixtures.SHOP;
 import static com.ponomarenko.mugloar.TestFixtures.ad;
 import static com.ponomarenko.mugloar.TestFixtures.state;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 
 class GameStrategyTest {
 
@@ -84,8 +84,8 @@ class GameStrategyTest {
 	void failsLoudlyWhenThereAreNoAdsAndNoPotion() {
 		List<ShopItem> noPotion = List.of(CLAW_SHARPENING);
 
-		assertThatIllegalStateException()
+		assertThatExceptionOfType(NoMoveAvailableException.class)
 				.isThrownBy(() -> strategy.decide(state(3, 10), List.of(), noPotion, Map.of(), Map.of()))
-				.withMessage("No ads available");
+				.withMessage("No ads available and nothing affordable to buy");
 	}
 }

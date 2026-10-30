@@ -2,6 +2,8 @@ package com.ponomarenko.mugloar.service;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.function.Supplier;
 
 import com.ponomarenko.mugloar.client.MugloarApiClient;
@@ -20,7 +22,8 @@ import org.springframework.stereotype.Component;
 
 /**
  * The primitive game operations: each one talks to the API, validates what it can up front,
- * updates the session and records the outcome. Callers are expected to hold the session lock.
+ * updates the session and records the outcome. Callers of the actions (solve, buy) are
+ * expected to hold the session lock; fetching ads or the shop needs no lock.
  */
 @Component
 public class GameEngine {
@@ -52,7 +55,9 @@ public class GameEngine {
 	}
 
 	public List<ShopItem> fetchShop(GameSession session) {
-		return session.shop(() -> client.getShop(session.gameId()).stream().map(ShopItem::from).toList());
+		return session.shop(() -> guardGameOver(session, () -> client.getShop(session.gameId())).stream()
+				.map(ShopItem::from)
+				.toList());
 	}
 
 	public Reputation investigate(GameSession session) {
@@ -61,10 +66,11 @@ public class GameEngine {
 	}
 
 	/**
-	 * Attempts an ad. {@code description} is the ad text when known (for the history); manual
-	 * requests only carry an id, so the text is looked up on the last fetched board instead.
+	 * Attempts an ad. Its text and family come from the last fetched board; an id that is not on
+	 * it (a stale manual click) is still forwarded, since the API has the final say on whether it
+	 * is valid.
 	 */
-	public TurnRecord solve(GameSession session, String adId, String description, String reason, boolean automated) {
+	public TurnRecord solve(GameSession session, String adId, String reason, boolean automated) {
 		requireActive(session);
 		SolveResponse response;
 		try {
@@ -77,10 +83,10 @@ public class GameEngine {
 			throw ex;
 		}
 		GameState after = session.state().after(response);
-		String text = description != null ? description : session.describeAd(adId);
-		TurnRecord record = new TurnRecord(after.turn(), ActionType.SOLVE, adId, text != null ? text : adId,
-				response.success(), response.message(), reason, automated, after, Instant.now());
-		session.record(record);
+		Optional<Ad> ad = session.adOnBoard(adId);
+		TurnRecord record = session.record(new TurnRecord(after.turn(), ActionType.SOLVE, adId,
+				ad.map(Ad::message).orElse(adId), ad.map(Ad::family).orElse(""), response.success(),
+				response.message(), reason, automated, after, Map.of(), Instant.now()));
 		log.debug("Game {} turn {}: solve {} -> {} (lives={}, gold={}, score={})", after.gameId(), after.turn(), adId,
 				response.success() ? "success" : "failure", after.lives(), after.gold(), after.score());
 		return record;
@@ -100,9 +106,8 @@ public class GameEngine {
 		PurchaseResponse response = guardGameOver(session, () -> client.buy(session.gameId(), itemId));
 		GameState after = session.state().after(response);
 		String message = response.shoppingSuccess() ? "Bought " + item.name() : "Purchase of " + item.name() + " failed";
-		TurnRecord record = new TurnRecord(after.turn(), ActionType.BUY, itemId, item.name(),
-				response.shoppingSuccess(), message, reason, automated, after, Instant.now());
-		session.record(record);
+		TurnRecord record = session.record(new TurnRecord(after.turn(), ActionType.BUY, itemId, item.name(), "",
+				response.shoppingSuccess(), message, reason, automated, after, Map.of(), Instant.now()));
 		log.debug("Game {} turn {}: buy {} -> {} (gold={}, lives={}, level={})", after.gameId(), after.turn(), itemId,
 				response.shoppingSuccess(), after.gold(), after.lives(), after.level());
 		return record;

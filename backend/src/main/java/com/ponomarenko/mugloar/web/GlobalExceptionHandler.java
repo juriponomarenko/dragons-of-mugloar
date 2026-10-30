@@ -6,6 +6,7 @@ import com.ponomarenko.mugloar.client.MugloarApiException;
 import com.ponomarenko.mugloar.service.GameNotFoundException;
 import com.ponomarenko.mugloar.service.GameOverException;
 import com.ponomarenko.mugloar.service.InvalidActionException;
+import com.ponomarenko.mugloar.strategy.NoMoveAvailableException;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,6 +47,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
 	@ExceptionHandler(InvalidActionException.class)
 	ProblemDetail invalidAction(InvalidActionException ex) {
+		return problem(HttpStatus.UNPROCESSABLE_ENTITY, "Action not possible", ex.getMessage());
+	}
+
+	@ExceptionHandler(NoMoveAvailableException.class)
+	ProblemDetail noMove(NoMoveAvailableException ex) {
 		return problem(HttpStatus.UNPROCESSABLE_ENTITY, "Action not possible", ex.getMessage());
 	}
 

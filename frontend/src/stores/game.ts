@@ -44,6 +44,8 @@ export const useGameStore = defineStore('game', () => {
   const reputation = ref<Reputation | null>(null)
   const lastTurn = ref<TurnView | null>(null)
   const error = ref<string | null>(null)
+  /** Something worth knowing that is not a failure, e.g. why a server-side run stopped early. */
+  const notice = ref<string | null>(null)
   const errorDetails = ref<string[]>([])
   const loading = reactive({ game: false, board: false, action: false })
   const autoplay = reactive({ running: false, stopRequested: false, delayMs: 500 })
@@ -60,6 +62,10 @@ export const useGameStore = defineStore('game', () => {
   function clearError(): void {
     error.value = null
     errorDetails.value = []
+  }
+
+  function clearNotice(): void {
+    notice.value = null
   }
 
   function captureError(cause: unknown): void {
@@ -83,6 +89,7 @@ export const useGameStore = defineStore('game', () => {
     reputation.value = null
     lastTurn.value = null
     clearError()
+    clearNotice()
   }
 
   function applyTurn(turn: TurnView): void {
@@ -175,8 +182,7 @@ export const useGameStore = defineStore('game', () => {
       return turn
     } catch (cause) {
       captureError(cause)
-      // The board may have moved on (expired ad, server-side game over); show the latest.
-      if (cause instanceof ApiError && (cause.status === 422 || cause.status === 409)) {
+      if (isStaleStateError(cause)) {
         await resync(id)
       }
       return null
@@ -185,13 +191,22 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
+  /** A rejected action means the game moved on without us (expired ad, server-side game over). */
+  function isStaleStateError(cause: unknown): boolean {
+    return cause instanceof ApiError && (cause.status === 422 || cause.status === 409)
+  }
+
   async function resync(id: string): Promise<void> {
+    await resyncGame(id)
+    await refreshBoard()
+  }
+
+  async function resyncGame(id: string): Promise<void> {
     try {
       game.value = await gameApi.getGame(id)
     } catch {
       // keep what we have; the original error is already on screen
     }
-    await refreshBoard()
   }
 
   const solveAd = (adId: string) => performAction((id) => gameApi.solveAd(id, adId))
@@ -222,10 +237,16 @@ export const useGameStore = defineStore('game', () => {
     }
     autoplay.running = true
     autoplay.stopRequested = false
+    let boardIsStale = false
     try {
       while (!autoplay.stopRequested && game.value && !game.value.gameOver) {
         const turn = await performAction((id) => gameApi.autoplayStep(id))
-        if (!turn || turn.state.gameOver || autoplay.stopRequested) {
+        if (!turn) {
+          // the step failed before the board could be refreshed
+          boardIsStale = true
+          break
+        }
+        if (turn.state.gameOver || autoplay.stopRequested) {
           break
         }
         await sleep(autoplay.delayMs)
@@ -233,7 +254,9 @@ export const useGameStore = defineStore('game', () => {
     } finally {
       autoplay.running = false
       autoplay.stopRequested = false
-      await refreshBoard()
+      if (boardIsStale) {
+        await refreshBoard()
+      }
     }
   }
 
@@ -254,6 +277,7 @@ export const useGameStore = defineStore('game', () => {
       return
     }
     clearError()
+    clearNotice()
     loading.action = true
     try {
       const outcome = await gameApi.autoplay(id)
@@ -261,10 +285,14 @@ export const useGameStore = defineStore('game', () => {
       history.value = [...history.value, ...outcome.turns]
       lastTurn.value = outcome.turns[outcome.turns.length - 1] ?? lastTurn.value
       if (!outcome.gameOver) {
-        error.value = outcome.stoppedBecause
+        // Not a failure: the run stopped early (turn cap, upstream trouble) and the game goes on.
+        notice.value = outcome.stoppedBecause
       }
     } catch (cause) {
       captureError(cause)
+      if (isStaleStateError(cause)) {
+        await resyncGame(id)
+      }
     } finally {
       loading.action = false
       await refreshBoard()
@@ -281,6 +309,7 @@ export const useGameStore = defineStore('game', () => {
     lastTurn,
     error,
     errorDetails,
+    notice,
     loading,
     autoplay,
     lastGameId,
@@ -305,6 +334,7 @@ export const useGameStore = defineStore('game', () => {
     setAutoplayDelay,
     finishGame,
     clearError,
+    clearNotice,
     reset,
   }
 })

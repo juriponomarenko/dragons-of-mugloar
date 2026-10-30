@@ -273,7 +273,22 @@ describe('game store', () => {
 
     await store.finishGame()
 
-    expect(store.error).toBe('Stopped after repeated upstream errors')
+    expect(store.notice).toBe('Stopped after repeated upstream errors')
+    expect(store.error).toBeNull()
+  })
+
+  it('resyncs the game when a server-side finish is rejected', async () => {
+    api.startGame.mockResolvedValue(gameView({ gameId: 'g1' }))
+    api.autoplay.mockRejectedValue(new ApiError(409, 'Game over', 'the game is over'))
+    api.getGame.mockResolvedValue(gameView({ gameId: 'g1', lives: 0, gameOver: true, score: 800 }))
+    const store = useGameStore()
+    await store.startGame()
+
+    await store.finishGame()
+
+    expect(store.error).toBe('the game is over')
+    expect(store.isGameOver).toBe(true)
+    expect(store.game?.score).toBe(800)
   })
 
   it('investigates reputation', async () => {

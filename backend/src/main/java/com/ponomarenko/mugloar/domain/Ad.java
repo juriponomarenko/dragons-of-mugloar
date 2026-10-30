@@ -1,6 +1,7 @@
 package com.ponomarenko.mugloar.domain;
 
-import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 /**
@@ -17,7 +18,7 @@ import java.util.Locale;
 public record Ad(String adId, String message, int reward, int expiresIn, Probability probability,
 		String probabilityLabel, Encryption encryption) {
 
-	/** How many leading words identify a family of ads ("steal super awesome diamond"). */
+	/** How many words of the text identify a family of ads once names and places are skipped. */
 	static final int FAMILY_WORDS = 4;
 
 	public double successRate() {
@@ -28,16 +29,33 @@ public record Ad(String adId, String message, int reward, int expiresIn, Probabi
 		return encryption != Encryption.NONE;
 	}
 
-	/** The ad's family: its first few words, which the game reuses across ads of one kind. */
+	/** The ad's family, see {@link #family(String, Probability)}. */
 	public String family() {
-		return family(message);
+		return family(message, probability);
 	}
 
-	public static String family(String message) {
+	/**
+	 * The family of an ad: the kind of task it is, regardless of who it is for. The game
+	 * generates ads from templates ("Escort X to Y", "Steal super awesome diamond Z from W"),
+	 * so the first few words identify the template once names and places, which are the
+	 * capitalised words after the first, are skipped. The probability label is part of the key:
+	 * "Escort ... to ..." labelled <i>Hmmm</i> and the same text labelled <i>Piece of cake</i>
+	 * are different bets, and two failures of the first must not discredit the second.
+	 */
+	public static String family(String message, Probability probability) {
 		if (message == null) {
 			return "";
 		}
-		String[] words = message.toLowerCase(Locale.ROOT).replaceAll("[^\\p{L}\\p{N} ]", " ").trim().split("\\s+");
-		return String.join(" ", Arrays.copyOf(words, Math.min(FAMILY_WORDS, words.length)));
+		List<String> words = new ArrayList<>(FAMILY_WORDS);
+		String[] tokens = message.trim().split("\\s+");
+		for (int i = 0; i < tokens.length && words.size() < FAMILY_WORDS; i++) {
+			String word = tokens[i].replaceAll("[^\\p{L}\\p{N}]", "");
+			if (word.isEmpty() || (i > 0 && Character.isUpperCase(word.charAt(0)))) {
+				continue;
+			}
+			words.add(word.toLowerCase(Locale.ROOT));
+		}
+		String label = probability == null ? "" : "|" + probability.name().toLowerCase(Locale.ROOT);
+		return String.join(" ", words) + label;
 	}
 }

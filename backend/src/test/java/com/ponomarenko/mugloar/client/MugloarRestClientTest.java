@@ -156,7 +156,7 @@ class MugloarRestClientTest {
 
 		assertThatExceptionOfType(MugloarApiException.class)
 				.isThrownBy(() -> client.getMessages("nope"))
-				.satisfies(ex -> assertThat(ex.isNotFound()).isTrue());
+				.satisfies(ex -> assertThat(ex.getStatus()).isEqualTo(404));
 	}
 
 	@Test

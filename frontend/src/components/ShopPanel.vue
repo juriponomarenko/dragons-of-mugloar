@@ -27,7 +27,9 @@ const emit = defineEmits<{ buy: [itemId: string] }>()
             <span v-if="item.timesBought" class="badge badge-muted">×{{ item.timesBought }}</span>
           </div>
           <div class="shop__cost" :class="{ 'is-short': !item.affordable }">
-            {{ gold(item.cost) }} gold
+            {{ gold(item.cost) }} gold<span v-if="!item.affordable">
+              · {{ gold(item.cost - playerGold) }} more needed</span
+            >
           </div>
         </div>
         <button

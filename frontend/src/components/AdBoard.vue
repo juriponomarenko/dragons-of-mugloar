@@ -40,7 +40,6 @@ const hiddenCount = computed(() => props.ads.length - visibleAds.value.length)
       </div>
       <div class="board__controls">
         <label class="board__control">
-          <span class="visually-hidden">Sort ads by</span>
           <select v-model="sortBy" class="board__select" aria-label="Sort ads by">
             <option v-for="o in sortOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
           </select>

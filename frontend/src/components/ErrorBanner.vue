@@ -1,23 +1,26 @@
 <script setup lang="ts">
-defineProps<{ message: string | null; details?: string[] }>()
+withDefaults(defineProps<{ message: string | null; details?: string[]; tone?: 'error' | 'info' }>(), {
+  details: () => [],
+  tone: 'error',
+})
 const emit = defineEmits<{ dismiss: [] }>()
 </script>
 
 <template>
   <Transition name="banner">
-    <div v-if="message" class="banner" role="alert">
+    <div
+      v-if="message"
+      class="banner"
+      :class="`is-${tone}`"
+      :role="tone === 'error' ? 'alert' : 'status'"
+    >
       <div class="banner__body">
         <strong>{{ message }}</strong>
         <ul v-if="details?.length" class="banner__details">
           <li v-for="d in details" :key="d">{{ d }}</li>
         </ul>
       </div>
-      <button
-        class="banner__close"
-        type="button"
-        aria-label="Dismiss error"
-        @click="emit('dismiss')"
-      >
+      <button class="banner__close" type="button" aria-label="Dismiss" @click="emit('dismiss')">
         ×
       </button>
     </div>
@@ -33,9 +36,19 @@ const emit = defineEmits<{ dismiss: [] }>()
   margin: 12px 0;
   padding: 10px 14px;
   border-radius: var(--radius-sm);
+  border: 1px solid;
+}
+
+.banner.is-error {
   background: var(--danger-soft);
   color: var(--danger);
-  border: 1px solid var(--danger);
+  border-color: var(--danger);
+}
+
+.banner.is-info {
+  background: var(--accent-soft);
+  color: var(--text);
+  border-color: var(--accent);
 }
 
 .banner__details {

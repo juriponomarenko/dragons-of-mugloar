@@ -1,25 +1,28 @@
 package com.ponomarenko.mugloar.service;
 
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
+import java.util.Optional;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 import com.ponomarenko.mugloar.domain.Ad;
 import com.ponomarenko.mugloar.domain.GameState;
 import com.ponomarenko.mugloar.domain.ShopItem;
 
 /**
- * Server-side memory of one game: the latest state, the action history and what has been
- * bought. All mutation happens under the session lock so that a manual click and an
- * autoplay request can never interleave inside one game.
+ * Server-side memory of one game: the latest state, the action history, what has been bought
+ * and which ad families have failed.
+ * <p>
+ * Actions run under the session lock so that a manual click and an autoplay request can never
+ * interleave inside one game. Reads never take the lock: every piece of state is an immutable
+ * value that is swapped atomically, so the UI can follow a game while the server is playing it.
  */
 public class GameSession {
 
@@ -27,18 +30,19 @@ public class GameSession {
 
 	private final Instant createdAt = Instant.now();
 
-	private final List<TurnRecord> history = new ArrayList<>();
-
-	private final Map<String, Integer> purchases = new LinkedHashMap<>();
-
-	/** How often ads of each family (see {@link Ad#family()}) have failed in this game. */
-	private final Map<String, Integer> failedFamilies = new HashMap<>();
+	private final List<TurnRecord> history = new CopyOnWriteArrayList<>();
 
 	private volatile GameState state;
 
+	/** How often each item id has been bought, in order of first purchase. */
+	private volatile Map<String, Integer> purchases = Map.of();
+
+	/** How often ads of each family (see {@link Ad#family()}) have failed in this game. */
+	private volatile Map<String, Integer> failedFamilies = Map.of();
+
 	private volatile List<ShopItem> shop;
 
-	private volatile Map<String, String> lastBoard = Map.of();
+	private volatile Map<String, Ad> lastBoard = Map.of();
 
 	public GameSession(GameState initial) {
 		this.state = initial;
@@ -71,21 +75,30 @@ public class GameSession {
 		}
 	}
 
-	void record(TurnRecord turn) {
+	/** Stores a turn and returns it completed with the purchases as they stand afterwards. */
+	TurnRecord record(TurnRecord turn) {
 		lock.lock();
 		try {
-			history.add(turn);
-			state = turn.stateAfter();
 			if (turn.action() == ActionType.BUY && turn.success()) {
-				purchases.merge(turn.targetId(), 1, Integer::sum);
+				purchases = incremented(purchases, turn.targetId());
 			}
-			if (turn.action() == ActionType.SOLVE && !turn.success()) {
-				failedFamilies.merge(Ad.family(turn.description()), 1, Integer::sum);
+			if (turn.action() == ActionType.SOLVE && !turn.success() && !turn.family().isEmpty()) {
+				failedFamilies = incremented(failedFamilies, turn.family());
 			}
+			TurnRecord stored = turn.withPurchases(purchases);
+			history.add(stored);
+			state = stored.stateAfter();
+			return stored;
 		}
 		finally {
 			lock.unlock();
 		}
+	}
+
+	private static Map<String, Integer> incremented(Map<String, Integer> counts, String key) {
+		Map<String, Integer> copy = new LinkedHashMap<>(counts);
+		copy.merge(key, 1, Integer::sum);
+		return Collections.unmodifiableMap(copy);
 	}
 
 	/** Called when the upstream API reports the game as finished although we still counted lives. */
@@ -101,53 +114,25 @@ public class GameSession {
 	}
 
 	public List<TurnRecord> history() {
-		lock.lock();
-		try {
-			return List.copyOf(history);
-		}
-		finally {
-			lock.unlock();
-		}
-	}
-
-	public Set<String> ownedItemIds() {
-		lock.lock();
-		try {
-			return Set.copyOf(purchases.keySet());
-		}
-		finally {
-			lock.unlock();
-		}
+		return List.copyOf(history);
 	}
 
 	public Map<String, Integer> purchases() {
-		lock.lock();
-		try {
-			return Collections.unmodifiableMap(new LinkedHashMap<>(purchases));
-		}
-		finally {
-			lock.unlock();
-		}
+		return purchases;
 	}
 
 	public Map<String, Integer> failedFamilies() {
-		lock.lock();
-		try {
-			return Map.copyOf(failedFamilies);
-		}
-		finally {
-			lock.unlock();
-		}
+		return failedFamilies;
 	}
 
-	/** Remembers the most recently fetched board so manual actions can be described by ad text. */
+	/** Remembers the most recently fetched board so actions can be described by ad text and family. */
 	void rememberBoard(List<Ad> ads) {
-		lastBoard = ads.stream().collect(Collectors.toUnmodifiableMap(Ad::adId, Ad::message, (a, b) -> a));
+		lastBoard = ads.stream().collect(Collectors.toUnmodifiableMap(Ad::adId, Function.identity(), (a, b) -> a));
 	}
 
-	/** The text of an ad from the last fetched board, or {@code null} if it is not on it. */
-	public String describeAd(String adId) {
-		return lastBoard.get(adId);
+	/** The ad with this id on the last fetched board, if it is on it. */
+	public Optional<Ad> adOnBoard(String adId) {
+		return Optional.ofNullable(lastBoard.get(adId));
 	}
 
 	/** The shop listing does not change during a game, so it is fetched once per session. */

@@ -52,15 +52,17 @@ const expiresSoon = computed(() => props.ad.expiresIn <= 1)
 
     <dl class="ad__stats">
       <div>
-        <dt>Chance</dt>
+        <dt title="Estimated chance of success for this label">Chance</dt>
         <dd>{{ percent(ad.successRate) }}</dd>
       </div>
       <div>
-        <dt>Expected</dt>
+        <dt title="Chance × reward: the gold to expect on average">Expected</dt>
         <dd>{{ compact(ad.expectedValue) }}</dd>
       </div>
       <div>
-        <dt>Score</dt>
+        <dt title="Expected gold minus the expected cost of a lost life (and a reputation discount); the advisor ranks by this">
+          Score
+        </dt>
         <dd>{{ compact(ad.score) }}</dd>
       </div>
       <div :class="{ 'is-urgent': expiresSoon }">

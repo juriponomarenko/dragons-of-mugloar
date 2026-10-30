@@ -60,7 +60,7 @@ class AutoPlayerTest {
 
 		assertThat(record.action()).isEqualTo(ActionType.BUY);
 		assertThat(record.targetId()).isEqualTo("cs");
-		assertThat(session.ownedItemIds()).contains("cs");
+		assertThat(session.purchases()).containsEntry("cs", 1);
 	}
 
 	@Test
@@ -135,7 +135,7 @@ class AutoPlayerTest {
 
 		assertThat(outcome.turns()).hasSize(2);
 		assertThat(outcome.stoppedBecause()).isEqualTo("Reached the turn limit of 2");
-		assertThat(pauses).containsExactly(10_000L);
+		assertThat(pauses).containsExactly(15_000L);
 	}
 
 	@Test
@@ -146,7 +146,22 @@ class AutoPlayerTest {
 		AutoplayOutcome outcome = autoPlayer.playToEnd(session, 1);
 
 		assertThat(outcome.turns()).hasSize(1);
-		assertThat(pauses).containsExactly(10_000L, 20_000L);
+		assertThat(pauses).containsExactly(15_000L, 30_000L);
+	}
+
+	@Test
+	void rateLimitsDoNotCountAsFailuresButPatienceHasALimit() {
+		for (int i = 0; i <= AutoPlayer.MAX_RATE_LIMIT_WAITS; i++) {
+			api.messageFailures.push(new MugloarApiException(MugloarApiException.TOO_MANY_REQUESTS, "", "slow down"));
+		}
+
+		AutoplayOutcome outcome = autoPlayer.playToEnd(session, 5);
+
+		assertThat(outcome.turns()).isEmpty();
+		assertThat(outcome.gameOver()).isFalse();
+		assertThat(outcome.stoppedBecause()).startsWith("Stopped: the API kept rate-limiting us");
+		assertThat(pauses).hasSize(AutoPlayer.MAX_RATE_LIMIT_WAITS).last().isEqualTo(60_000L);
+		assertThat(pauses.get(0)).isEqualTo(15_000L);
 	}
 
 	@Test
@@ -156,7 +171,19 @@ class AutoPlayerTest {
 		AutoplayOutcome outcome = autoPlayer.playToEnd(session, 10);
 
 		assertThat(outcome.turns()).isEmpty();
-		assertThat(outcome.stoppedBecause()).isEqualTo("Stopped: No ads available");
+		assertThat(outcome.stoppedBecause()).isEqualTo("Stopped: No ads available and nothing affordable to buy");
+	}
+
+	@Test
+	void aGameOverReportedByTheApiMidRunEndsTheRunCleanly() {
+		api.solveFailures.push(new MugloarApiException(410, "{\"status\":\"Game Over\"}", "gone"));
+
+		AutoplayOutcome outcome = autoPlayer.playToEnd(session, 5);
+
+		assertThat(outcome.gameOver()).isTrue();
+		assertThat(outcome.turns()).isEmpty();
+		assertThat(outcome.stoppedBecause()).isEqualTo("Game over (reported by the API)");
+		assertThat(session.isOver()).isTrue();
 	}
 
 	@Test

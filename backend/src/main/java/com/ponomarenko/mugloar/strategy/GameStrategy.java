@@ -61,7 +61,7 @@ public class GameStrategy {
 		AdAssessment fallback = ranked.stream()
 				.max(Comparator.comparingDouble(AdAssessment::successRate)
 						.thenComparingDouble(AdAssessment::expectedValue))
-				.orElseThrow(() -> new IllegalStateException("No ads available"));
+				.orElseThrow(() -> new NoMoveAvailableException("No ads available and nothing affordable to buy"));
 		return new Decision.Solve(fallback, "No ad meets the safety threshold and no potion is affordable; "
 				+ "taking the least dangerous one (" + fallback.ad().probabilityLabel() + ")");
 	}
