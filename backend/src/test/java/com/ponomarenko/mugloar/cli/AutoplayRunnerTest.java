@@ -2,11 +2,13 @@ package com.ponomarenko.mugloar.cli;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import com.ponomarenko.mugloar.client.MugloarApiException;
 import com.ponomarenko.mugloar.config.AutoplayProperties;
 import com.ponomarenko.mugloar.domain.GameState;
 import com.ponomarenko.mugloar.service.AutoplayOutcome;
+import com.ponomarenko.mugloar.service.GameSession;
 import com.ponomarenko.mugloar.service.GameService;
 import org.junit.jupiter.api.Test;
 
@@ -25,7 +27,9 @@ class AutoplayRunnerTest {
 	private final List<Long> pauses = new ArrayList<>();
 
 	private static AutoplayOutcome finishedWith(int score) {
-		return new AutoplayOutcome(new GameState("g", 0, 10, 5, score, score, 50), List.of(), true, "Game over");
+		GameSession.Snapshot end = new GameSession.Snapshot(new GameState("g", 0, 10, 5, score, score, 50), Map.of(),
+				Map.of());
+		return new AutoplayOutcome(end, List.of(), true, "Game over");
 	}
 
 	private AutoplayRunner runner(int games) {

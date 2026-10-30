@@ -76,12 +76,12 @@ class StrategyDefaultsTest {
 	void theFirstFiftyGoldBuysAPotionAndUpgradesWaitForTheReserve() {
 		List<Ad> ads = List.of(ad("easy", Probability.SURE_THING, 20));
 
-		assertThat(strategy.decide(state(3, 50), ads, SHOP, Map.of(), Map.of()))
+		assertThat(strategy.decide(state(3, 50), ads, SHOP, Map.of(), Map.of(), false))
 				.isInstanceOfSatisfying(Decision.Buy.class, buy -> assertThat(buy.item()).isEqualTo(POTION));
 		// four lives and 150 gold: 50 above the reserve buys nothing, so the dragon earns instead
-		assertThat(strategy.decide(state(4, 150), ads, SHOP, Map.of(), Map.of())).isInstanceOf(Decision.Solve.class);
+		assertThat(strategy.decide(state(4, 150), ads, SHOP, Map.of(), Map.of(), false)).isInstanceOf(Decision.Solve.class);
 		// 200 gold: the first rung of the ladder is affordable above the reserve
-		assertThat(strategy.decide(state(4, 200), ads, SHOP, Map.of(), Map.of()))
+		assertThat(strategy.decide(state(4, 200), ads, SHOP, Map.of(), Map.of(), false))
 				.isInstanceOfSatisfying(Decision.Buy.class, buy -> assertThat(buy.item()).isEqualTo(CLAW_SHARPENING));
 	}
 
@@ -90,7 +90,7 @@ class StrategyDefaultsTest {
 		Ad trap = ad("trap", "Steal super awesome diamond pan from Kassiopeia Clemens", Probability.SURE_THING, 322);
 		Ad honest = ad("honest", "Help Bob fix his fence", Probability.PIECE_OF_CAKE, 30);
 
-		Decision decision = strategy.decide(state(4, 150), List.of(trap, honest), SHOP, Map.of(), Map.of());
+		Decision decision = strategy.decide(state(4, 150), List.of(trap, honest), SHOP, Map.of(), Map.of(), false);
 
 		assertThat(decision).isInstanceOfSatisfying(Decision.Solve.class,
 				solve -> assertThat(solve.assessment().ad().adId()).isEqualTo("honest"));

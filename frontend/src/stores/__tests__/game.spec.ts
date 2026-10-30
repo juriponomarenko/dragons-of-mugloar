@@ -157,6 +157,43 @@ describe('game store', () => {
     expect(await store.solveAd('a1')).not.toBeNull()
   })
 
+  it('does not hand back the id of a start that was abandoned for another game', async () => {
+    api.startGame.mockResolvedValueOnce(gameView({ gameId: 'A' }))
+    let boardOfA: (ads: ReturnType<typeof adView>[]) => void = () => {}
+    api.getAds.mockReturnValueOnce(new Promise((resolve) => (boardOfA = resolve)))
+    const store = useGameStore()
+    const first = store.startGame()
+    await vi.waitFor(() => expect(api.getAds).toHaveBeenCalledWith('A'))
+
+    api.startGame.mockResolvedValueOnce(gameView({ gameId: 'B' }))
+    expect(await store.startGame()).toBe('B')
+    boardOfA([adView()])
+
+    expect(await first).toBeNull()
+    expect(store.game?.gameId).toBe('B')
+  })
+
+  it('holds actions while the same game is being reloaded and ignores an older answer', async () => {
+    api.getGame.mockResolvedValue(gameView({ gameId: 'g2', turn: 3 }))
+    api.getHistory.mockResolvedValue([turnView(), turnView({ turn: 2 }), turnView({ turn: 3 })])
+    const store = useGameStore()
+    await store.loadGame('g2')
+    let answer: (state: ReturnType<typeof gameView>) => void = () => {}
+    api.getGame.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)))
+    api.getHistory.mockResolvedValueOnce([turnView()])
+
+    const resume = store.loadGame('g2')
+    await vi.waitFor(() => expect(store.busy).toBe(true))
+    expect(await store.solveAd('a1')).toBeNull()
+    expect(api.solveAd).not.toHaveBeenCalled()
+    answer(gameView({ gameId: 'g2', turn: 1 }))
+    await resume
+
+    expect(store.game?.turn).toBe(3)
+    expect(store.history).toHaveLength(3)
+    expect(store.busy).toBe(false)
+  })
+
   it('reloads everything after an action whose outcome is unknown', async () => {
     api.startGame.mockResolvedValue(gameView({ gameId: 'g1' }))
     api.solveAd.mockRejectedValue(

@@ -50,6 +50,12 @@ public class GameSession {
 
 	private volatile Map<String, Ad> lastBoard = Map.of();
 
+	/**
+	 * Set when an action got no answer: the game may have carried it out, so gold and lives are
+	 * not to be trusted until the next answer refreshes them. Nothing is bought meanwhile.
+	 */
+	private volatile boolean stateUncertain;
+
 	public GameSession(GameState initial) {
 		this.snapshot = new Snapshot(initial, Map.of(), Map.of());
 	}
@@ -83,6 +89,14 @@ public class GameSession {
 		return state().isOver();
 	}
 
+	public boolean isStateUncertain() {
+		return stateUncertain;
+	}
+
+	void markStateUncertain() {
+		stateUncertain = true;
+	}
+
 	/** Runs {@code work} while holding this session's lock. */
 	public <T> T locked(Supplier<T> work) {
 		lock.lock();
@@ -110,6 +124,7 @@ public class GameSession {
 			TurnRecord stored = turn.withPurchases(purchases);
 			history.add(stored);
 			snapshot = new Snapshot(stored.stateAfter(), purchases, failedFamilies);
+			stateUncertain = false; // every answer carries the full state
 			return stored;
 		}
 		finally {

@@ -90,6 +90,7 @@ public class GameEngine {
 			if (ex.isRejectedRequest()) {
 				throw new InvalidActionException("Ad '" + adId + "' cannot be solved: it has expired or does not exist");
 			}
+			noteIfUncertain(session, ex);
 			throw ex;
 		}
 		GameState after = session.state().after(response);
@@ -112,7 +113,14 @@ public class GameEngine {
 			throw new InvalidActionException("Not enough gold for '" + item.name() + "': costs " + item.cost()
 					+ ", you have " + session.state().gold());
 		}
-		PurchaseResponse response = guardGameOver(session, () -> client.buy(session.gameId(), itemId));
+		PurchaseResponse response;
+		try {
+			response = guardGameOver(session, () -> client.buy(session.gameId(), itemId));
+		}
+		catch (MugloarApiException ex) {
+			noteIfUncertain(session, ex);
+			throw ex;
+		}
 		GameState after = session.state().after(response);
 		String message = response.shoppingSuccess() ? "Bought " + item.name() : "Purchase of " + item.name() + " failed";
 		TurnRecord record = session.record(new TurnRecord(after.turn(), ActionType.BUY, itemId, item.name(), "",
@@ -144,6 +152,17 @@ public class GameEngine {
 				throw new GameOverException(session.gameId(), "the game server no longer knows it");
 			}
 			throw ex;
+		}
+	}
+
+	/**
+	 * An action that got no answer (timeout, connection reset) may still have been carried out;
+	 * the game's gold and lives are unknown until the next answer, so the session says so.
+	 */
+	private static void noteIfUncertain(GameSession session, MugloarApiException ex) {
+		if (ex.getStatus() == MugloarApiException.NO_RESPONSE) {
+			log.warn("Game {}: no answer to an action; the game may have moved on without us", session.gameId());
+			session.markStateUncertain();
 		}
 	}
 

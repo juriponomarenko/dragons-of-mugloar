@@ -24,7 +24,7 @@ class GameStrategyTest {
 	@Test
 	void shoppingComesBeforeSolving() {
 		Decision decision = strategy.decide(state(2, 60), List.of(ad("easy", Probability.SURE_THING, 100)), SHOP,
-				Map.of(), Map.of());
+				Map.of(), Map.of(), false);
 
 		assertThat(decision).isInstanceOfSatisfying(Decision.Buy.class, buy -> {
 			assertThat(buy.item()).isEqualTo(POTION);
@@ -35,7 +35,7 @@ class GameStrategyTest {
 	@Test
 	void surplusGoldGoesIntoUpgrades() {
 		Decision decision = strategy.decide(state(3, 150), List.of(ad("easy", Probability.SURE_THING, 100)), SHOP,
-				Map.of(), Map.of());
+				Map.of(), Map.of(), false);
 
 		assertThat(decision).isInstanceOfSatisfying(Decision.Buy.class, buy -> {
 			assertThat(buy.item()).isEqualTo(CLAW_SHARPENING);
@@ -48,7 +48,7 @@ class GameStrategyTest {
 		Decision decision = strategy.decide(state(3, 10),
 				List.of(ad("meh", Probability.SURE_THING, 5), ad("good", Probability.PIECE_OF_CAKE, 90),
 						ad("deadly", Probability.IMPOSSIBLE, 999)),
-				SHOP, Map.of(), Map.of());
+				SHOP, Map.of(), Map.of(), false);
 
 		assertThat(decision).isInstanceOfSatisfying(Decision.Solve.class, solve -> {
 			assertThat(solve.assessment().ad().adId()).isEqualTo("good");
@@ -59,7 +59,7 @@ class GameStrategyTest {
 	@Test
 	void buysPotionToRerollWhenNoAdIsSafeEnough() {
 		Decision decision = strategy.decide(state(3, 50), List.of(ad("deadly", Probability.IMPOSSIBLE, 999)), SHOP,
-				Map.of(), Map.of());
+				Map.of(), Map.of(), false);
 
 		assertThat(decision).isInstanceOfSatisfying(Decision.Buy.class, buy -> {
 			assertThat(buy.item()).isEqualTo(POTION);
@@ -72,7 +72,7 @@ class GameStrategyTest {
 		Decision decision = strategy.decide(state(3, 10),
 				List.of(ad("deadly", Probability.IMPOSSIBLE, 999), ad("risky", Probability.RISKY, 10),
 						ad("fire", Probability.PLAYING_WITH_FIRE, 500)),
-				SHOP, Map.of(), Map.of());
+				SHOP, Map.of(), Map.of(), false);
 
 		assertThat(decision).isInstanceOfSatisfying(Decision.Solve.class, solve -> {
 			assertThat(solve.assessment().ad().adId()).isEqualTo("risky");
@@ -81,11 +81,20 @@ class GameStrategyTest {
 	}
 
 	@Test
+	void neverBuysWhileTheGoldIsUncertain() {
+		// two lives and plenty of gold would normally mean a potion; an unanswered action puts that on hold
+		Decision decision = strategy.decide(state(2, 500), List.of(ad("easy", Probability.SURE_THING, 10)), SHOP,
+				Map.of(), Map.of(), true);
+
+		assertThat(decision).isInstanceOf(Decision.Solve.class);
+	}
+
+	@Test
 	void failsLoudlyWhenThereAreNoAdsAndNoPotion() {
 		List<ShopItem> noPotion = List.of(CLAW_SHARPENING);
 
 		assertThatExceptionOfType(NoMoveAvailableException.class)
-				.isThrownBy(() -> strategy.decide(state(3, 10), List.of(), noPotion, Map.of(), Map.of()))
+				.isThrownBy(() -> strategy.decide(state(3, 10), List.of(), noPotion, Map.of(), Map.of(), false))
 				.withMessage("No ads available and nothing affordable to buy");
 	}
 }

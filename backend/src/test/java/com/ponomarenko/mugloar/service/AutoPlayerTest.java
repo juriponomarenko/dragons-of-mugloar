@@ -165,6 +165,22 @@ class AutoPlayerTest {
 	}
 
 	@Test
+	void aLostPurchaseAnswerIsNotRetriedAsAnotherPurchase() {
+		api.gold = 250;
+		session = engine.start();
+		api.loseNextBuyResponse = true;
+
+		AutoplayOutcome outcome = autoPlayer.playToEnd(session, 1);
+
+		// the game carried the purchase out once; the retry solved an ad instead of buying again
+		assertThat(api.boughtItemIds).containsExactly("cs");
+		assertThat(outcome.turns()).extracting(TurnRecord::action).containsExactly(ActionType.SOLVE);
+		// the solve answer brought the real state back: 250 - 100 for the claws + 20 reward
+		assertThat(session.state().gold()).isEqualTo(170);
+		assertThat(session.isStateUncertain()).isFalse();
+	}
+
+	@Test
 	void stopsWhenTheBoardIsEmptyAndNothingCanBeBought() {
 		api.board = List::of;
 

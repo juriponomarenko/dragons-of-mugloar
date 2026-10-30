@@ -28,9 +28,15 @@ public class GameStrategy {
 		this.shoppingPolicy = shoppingPolicy;
 	}
 
+	/**
+	 * @param stateUncertain whether an earlier action went unanswered, so {@code state} may be
+	 * behind the game; nothing is bought then, since a purchase is not safe to repeat, and the
+	 * solve that follows refreshes the state
+	 */
 	public Decision decide(GameState state, List<Ad> ads, List<ShopItem> shop, Map<String, Integer> purchases,
-			Map<String, Integer> failedFamilies) {
-		Optional<ShopItem> purchase = shoppingPolicy.choosePurchase(state, shop, purchases);
+			Map<String, Integer> failedFamilies, boolean stateUncertain) {
+		Optional<ShopItem> purchase = stateUncertain ? Optional.empty()
+				: shoppingPolicy.choosePurchase(state, shop, purchases);
 		if (purchase.isPresent()) {
 			ShopItem item = purchase.get();
 			String reason = StrategyProperties.HEALING_POTION_ID.equals(item.id())
@@ -50,6 +56,7 @@ public class GameStrategy {
 
 		// Nothing safe enough on the board. A potion both adds a life and rolls the board over.
 		Optional<ShopItem> potion = shop.stream()
+				.filter(i -> !stateUncertain)
 				.filter(i -> StrategyProperties.HEALING_POTION_ID.equals(i.id()))
 				.filter(i -> i.cost() <= state.gold())
 				.findFirst();

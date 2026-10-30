@@ -157,11 +157,16 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
+  /** A reload that answers with an older turn than the one on screen is stale and must not win. */
+  function isAtLeastAsNewAsScreen(state: GameView): boolean {
+    return !game.value || game.value.gameId !== state.gameId || state.turn >= game.value.turn
+  }
+
   /** Reloads the state and the history from the server, then the board. */
   async function reloadFromServer(id: string, requested: number): Promise<void> {
     try {
       const [state, turns] = await Promise.all([gameApi.getGame(id), gameApi.getHistory(id)])
-      if (isCurrent(requested)) {
+      if (isCurrent(requested) && isAtLeastAsNewAsScreen(state)) {
         game.value = state
         history.value = turns
       }
@@ -189,7 +194,8 @@ export const useGameStore = defineStore('game', () => {
       lastGameId.value = started.gameId
       writeLastGameId(started.gameId)
       await refreshBoard()
-      return started.gameId
+      // the player may have opened another game while the board was loading
+      return isCurrent(requested) ? started.gameId : null
     } catch (cause) {
       if (isCurrent(requested)) {
         captureError(cause)
@@ -210,7 +216,16 @@ export const useGameStore = defineStore('game', () => {
   async function loadGame(id: string): Promise<boolean> {
     if (gameId.value === id && game.value) {
       // Already on screen (e.g. navigated away and back): the server may have moved on meanwhile.
-      await reloadFromServer(id, generation)
+      // Actions are held while the reload is in flight so a slow answer cannot undo a newer turn.
+      const requested = generation
+      loading.game = true
+      try {
+        await reloadFromServer(id, requested)
+      } finally {
+        if (isCurrent(requested)) {
+          loading.game = false
+        }
+      }
       return true
     }
     reset()
@@ -257,7 +272,7 @@ export const useGameStore = defineStore('game', () => {
     apply: (result: T) => void,
   ): Promise<T | null> {
     const id = gameId.value
-    if (!id || loading.action) {
+    if (!id || loading.action || loading.game) {
       return null
     }
     const requested = generation
@@ -303,7 +318,7 @@ export const useGameStore = defineStore('game', () => {
   async function reloadState(id: string, requested: number): Promise<void> {
     try {
       const state = await gameApi.getGame(id)
-      if (isCurrent(requested)) {
+      if (isCurrent(requested) && isAtLeastAsNewAsScreen(state)) {
         game.value = state
       }
     } catch {

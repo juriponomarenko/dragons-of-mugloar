@@ -49,6 +49,8 @@ class GameControllerTest {
 
 	private static final GameState STATE = new GameState("g1", 3, 20, 0, 20, 0, 1);
 
+	private static final GameSession.Snapshot SNAPSHOT = new GameSession.Snapshot(STATE, Map.of(), Map.of());
+
 	@Autowired
 	private MockMvc mockMvc;
 
@@ -204,8 +206,8 @@ class GameControllerTest {
 
 	@Test
 	void autoplayAcceptsOptionalBodyAndValidatesIt() throws Exception {
-		when(gameService.autoplay(eq("g1"), eq(Integer.MAX_VALUE))).thenReturn(new AutoplayOutcome(STATE, List.of(turn(true)), true, "Game over"));
-		when(gameService.autoplay(eq("g1"), eq(10))).thenReturn(new AutoplayOutcome(STATE, List.of(), false, "Reached the turn limit of 10"));
+		when(gameService.autoplay(eq("g1"), eq(Integer.MAX_VALUE))).thenReturn(new AutoplayOutcome(SNAPSHOT, List.of(turn(true)), true, "Game over"));
+		when(gameService.autoplay(eq("g1"), eq(10))).thenReturn(new AutoplayOutcome(SNAPSHOT, List.of(), false, "Reached the turn limit of 10"));
 		when(gameService.getGame("g1")).thenReturn(session());
 
 		mockMvc.perform(post("/api/games/g1/autoplay"))

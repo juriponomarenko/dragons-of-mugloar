@@ -54,6 +54,9 @@ class FakeMugloarApi implements MugloarApiClient {
 
 	int shopRequests;
 
+	/** Carries out the next purchase but loses the answer, as a dropped connection would. */
+	boolean loseNextBuyResponse;
+
 	@Override
 	public GameStartResponse startGame() {
 		return new GameStartResponse(GAME_ID, lives, gold, level, score, 0, turn);
@@ -111,6 +114,10 @@ class FakeMugloarApi implements MugloarApiClient {
 			else {
 				level++;
 			}
+		}
+		if (loseNextBuyResponse) {
+			loseNextBuyResponse = false;
+			throw new MugloarApiException(MugloarApiException.NO_RESPONSE, "", "connection reset");
 		}
 		return new PurchaseResponse(success, gold, lives, level, turn);
 	}

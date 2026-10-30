@@ -8,7 +8,7 @@ import org.springframework.validation.annotation.Validated;
 
 /**
  * Settings for the Dragons of Mugloar game API. Timeouts are configured through Boot's
- * standard {@code spring.http.client.*} properties.
+ * standard {@code spring.http.clients.*} properties.
  *
  * @param baseUrl base URL of the API, including the version segment
  * @param userAgent value sent in the {@code User-Agent} header (the API sits behind a CDN that

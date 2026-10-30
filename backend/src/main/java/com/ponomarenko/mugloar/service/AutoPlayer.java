@@ -71,7 +71,8 @@ public class AutoPlayer {
 		GameSession.Snapshot now = session.snapshot();
 		List<Ad> ads = engine.fetchAds(session);
 		List<ShopItem> shop = engine.fetchShop(session);
-		Decision decision = strategy.decide(now.state(), ads, shop, now.purchases(), now.failedFamilies());
+		Decision decision = strategy.decide(now.state(), ads, shop, now.purchases(), now.failedFamilies(),
+				session.isStateUncertain());
 		return switch (decision) {
 			case Decision.Buy buy -> engine.buy(session, buy.item().id(), buy.reason(), true);
 			case Decision.Solve solve -> engine.solve(session, solve.assessment().ad(), solve.reason(), true);
@@ -143,10 +144,11 @@ public class AutoPlayer {
 		if (!session.isOver() && turns.size() >= limit) {
 			stoppedBecause = "Reached the turn limit of " + limit;
 		}
-		GameState finalState = session.state();
+		GameSession.Snapshot finalSnapshot = session.snapshot();
+		GameState finalState = finalSnapshot.state();
 		log.info("Game {} autoplay finished: score={}, turns={}, lives={}, reason='{}'", session.gameId(),
 				finalState.score(), turns.size(), finalState.lives(), stoppedBecause);
-		return new AutoplayOutcome(finalState, turns, session.isOver(), stoppedBecause);
+		return new AutoplayOutcome(finalSnapshot, turns, finalState.isOver(), stoppedBecause);
 	}
 
 	/** 15, 30, 45 seconds, then a minute at a time: the limit window is long and the block with it. */

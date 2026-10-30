@@ -62,9 +62,12 @@ final class ViewMapper {
 				game(record.stateAfter(), record.purchasesAfter(), session.createdAt()), record.at());
 	}
 
+	/** Built from the outcome's own snapshot: a manual action queued behind the run must not leak in. */
 	static AutoplayView autoplay(AutoplayOutcome outcome, GameSession session) {
-		return new AutoplayView(game(session), outcome.turns().stream().map(t -> turn(t, session)).toList(),
-				outcome.gameOver(), outcome.stoppedBecause());
+		GameSession.Snapshot end = outcome.finalSnapshot();
+		return new AutoplayView(game(end.state(), end.purchases(), session.createdAt()),
+				outcome.turns().stream().map(t -> turn(t, session)).toList(), outcome.gameOver(),
+				outcome.stoppedBecause());
 	}
 
 	private static double round(double value) {
