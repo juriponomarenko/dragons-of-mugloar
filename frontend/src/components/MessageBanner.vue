@@ -1,8 +1,15 @@
 <script setup lang="ts">
-withDefaults(defineProps<{ message: string | null; details?: string[]; tone?: 'error' | 'info' }>(), {
-  details: () => [],
-  tone: 'error',
-})
+/**
+ * One line the player should read: an error (red, announced assertively) or a notice such as
+ * why a server-side run stopped early (accent, announced politely). Dismissable.
+ */
+withDefaults(
+  defineProps<{ message: string | null; details?: string[]; tone?: 'error' | 'info' }>(),
+  {
+    details: () => [],
+    tone: 'error',
+  },
+)
 const emit = defineEmits<{ dismiss: [] }>()
 </script>
 
@@ -16,7 +23,7 @@ const emit = defineEmits<{ dismiss: [] }>()
     >
       <div class="banner__body">
         <strong>{{ message }}</strong>
-        <ul v-if="details?.length" class="banner__details">
+        <ul v-if="details.length" class="banner__details">
           <li v-for="d in details" :key="d">{{ d }}</li>
         </ul>
       </div>

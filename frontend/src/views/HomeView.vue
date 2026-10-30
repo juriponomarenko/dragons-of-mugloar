@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { gameApi } from '@/api/client'
 import type { GameView } from '@/api/types'
 import { useGameStore } from '@/stores/game'
-import ErrorBanner from '@/components/ErrorBanner.vue'
+import MessageBanner from '@/components/MessageBanner.vue'
 import { gold } from '@/utils/format'
 
 const router = useRouter()
@@ -35,7 +35,11 @@ async function startNewGame() {
       advisor ranks every ad by its expected value and risk, and the autoplayer can take over
       whenever you like.
     </p>
-    <ErrorBanner :message="store.error" :details="store.errorDetails" @dismiss="store.clearError" />
+    <MessageBanner
+      :message="store.error"
+      :details="store.errorDetails"
+      @dismiss="store.clearError"
+    />
     <div class="hero__actions">
       <button
         class="btn btn-primary"

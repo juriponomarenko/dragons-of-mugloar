@@ -1,5 +1,6 @@
 package com.ponomarenko.mugloar.web;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -28,7 +29,7 @@ final class ViewMapper {
 		return game(now.state(), now.purchases(), session.createdAt());
 	}
 
-	static GameView game(GameState state, Map<String, Integer> purchases, java.time.Instant createdAt) {
+	static GameView game(GameState state, Map<String, Integer> purchases, Instant createdAt) {
 		return new GameView(state.gameId(), state.lives(), state.gold(), state.level(), state.score(),
 				state.highScore(), state.turn(), state.isOver(), purchases, createdAt);
 	}

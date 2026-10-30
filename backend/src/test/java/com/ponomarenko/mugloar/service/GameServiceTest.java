@@ -25,7 +25,7 @@ class GameServiceTest {
 	@BeforeEach
 	void setUp() {
 		api = new FakeMugloarApi();
-		StrategyProperties props = TestFixtures.defaultStrategy();
+		StrategyProperties props = TestFixtures.testStrategy();
 		GameEngine engine = new GameEngine(api, new AdDecoder());
 		AdEvaluator evaluator = new AdEvaluator(props);
 		ShoppingPolicy shoppingPolicy = new ShoppingPolicy(props);

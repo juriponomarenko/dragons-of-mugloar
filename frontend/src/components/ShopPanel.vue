@@ -37,7 +37,7 @@ const emit = defineEmits<{ buy: [itemId: string] }>()
           :class="item.suggested ? 'btn-primary' : ''"
           type="button"
           :disabled="disabled || !item.affordable"
-          :title="item.affordable ? `Buy ${item.name}` : `Need ${item.cost - playerGold} more gold`"
+          :aria-label="`Buy ${item.name}`"
           @click="emit('buy', item.id)"
         >
           Buy

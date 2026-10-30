@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { compact, gold, percent, time, turns } from '../format'
+import { compact, gold, percent, seconds, time, turns } from '../format'
 
 describe('format helpers', () => {
   it('formats rates as whole percentages', () => {
@@ -20,6 +20,12 @@ describe('format helpers', () => {
     expect(compact(47.5)).toBe('47.5')
     expect(compact(47.04)).toBe('47')
     expect(compact(-12.26)).toBe('-12.3')
+  })
+
+  it('formats a pause in seconds', () => {
+    expect(seconds(500)).toBe('0.5 s')
+    expect(seconds(2000)).toBe('2 s')
+    expect(seconds(1250)).toBe('1.3 s')
   })
 
   it('pluralises turns', () => {

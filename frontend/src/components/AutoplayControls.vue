@@ -1,27 +1,19 @@
 <script setup lang="ts">
 import { AUTOPLAY_MAX_DELAY, AUTOPLAY_MIN_DELAY } from '@/stores/game'
+import { seconds } from '@/utils/format'
 
-defineProps<{
-  running: boolean
-  busy: boolean
-  gameOver: boolean
-  delayMs: number
-  automatedTurns: number
-}>()
+defineProps<{ running: boolean; busy: boolean; gameOver: boolean; automatedTurns: number }>()
 
-const emit = defineEmits<{
-  step: []
-  run: []
-  stop: []
-  finish: []
-  'update:delayMs': [ms: number]
-}>()
+/** Pause between autoplay turns, owned by the parent (the store clamps it). */
+const delayMs = defineModel<number>('delayMs', { required: true })
+
+const emit = defineEmits<{ step: []; run: []; stop: []; finish: [] }>()
 
 const minDelay = AUTOPLAY_MIN_DELAY
 const maxDelay = AUTOPLAY_MAX_DELAY
 
 function onDelayInput(event: Event) {
-  emit('update:delayMs', Number((event.target as HTMLInputElement).value))
+  delayMs.value = Number((event.target as HTMLInputElement).value)
 }
 </script>
 
@@ -58,7 +50,7 @@ function onDelayInput(event: Event) {
     </div>
     <label class="autoplay__speed">
       <span
-        >Pause between turns: <strong>{{ delayMs }} ms</strong></span
+        >Pause between turns: <strong>{{ seconds(delayMs) }}</strong></span
       >
       <input
         type="range"
@@ -66,7 +58,8 @@ function onDelayInput(event: Event) {
         :max="maxDelay"
         step="100"
         :value="delayMs"
-        aria-label="Pause between autoplay turns in milliseconds"
+        aria-label="Pause between autoplay turns"
+        :aria-valuetext="seconds(delayMs)"
         @input="onDelayInput"
       />
     </label>

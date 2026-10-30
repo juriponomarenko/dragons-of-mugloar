@@ -18,8 +18,8 @@ import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 
 class GameStrategyTest {
 
-	private final GameStrategy strategy = new GameStrategy(new AdEvaluator(TestFixtures.defaultStrategy()),
-			new ShoppingPolicy(TestFixtures.defaultStrategy()));
+	private final GameStrategy strategy = new GameStrategy(new AdEvaluator(TestFixtures.testStrategy()),
+			new ShoppingPolicy(TestFixtures.testStrategy()));
 
 	@Test
 	void shoppingComesBeforeSolving() {

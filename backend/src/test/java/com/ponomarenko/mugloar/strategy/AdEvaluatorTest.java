@@ -20,7 +20,7 @@ import static org.assertj.core.api.Assertions.within;
 
 class AdEvaluatorTest {
 
-	private final AdEvaluator evaluator = new AdEvaluator(TestFixtures.defaultStrategy());
+	private final AdEvaluator evaluator = new AdEvaluator(TestFixtures.testStrategy());
 
 	@Test
 	void ranksAdsByScoreBestFirst() {

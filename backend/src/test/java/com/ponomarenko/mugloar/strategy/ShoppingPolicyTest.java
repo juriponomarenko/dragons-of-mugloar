@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ShoppingPolicyTest {
 
 	/** Default fixture: order cs (100), gas (100), ch (300); reserve 50; rebuy on. */
-	private final ShoppingPolicy policy = new ShoppingPolicy(TestFixtures.defaultStrategy());
+	private final ShoppingPolicy policy = new ShoppingPolicy(TestFixtures.testStrategy());
 
 	@Test
 	void buysPotionWhenLivesAreLowAndAffordable() {

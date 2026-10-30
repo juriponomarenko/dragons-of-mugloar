@@ -27,6 +27,7 @@ const visibleAds = computed(() => {
 })
 
 const hiddenCount = computed(() => props.ads.length - visibleAds.value.length)
+const eligibleCount = computed(() => props.ads.filter((ad) => ad.eligible).length)
 </script>
 
 <template>
@@ -35,7 +36,7 @@ const hiddenCount = computed(() => props.ads.length - visibleAds.value.length)
       <div>
         <h2 class="board__title">Message board</h2>
         <p class="muted board__subtitle">
-          {{ ads.length }} ads · {{ ads.filter((a) => a.eligible).length }} within your risk budget
+          {{ ads.length }} ads · {{ eligibleCount }} within your risk budget
         </p>
       </div>
       <div class="board__controls">
@@ -44,7 +45,7 @@ const hiddenCount = computed(() => props.ads.length - visibleAds.value.length)
             <option v-for="o in sortOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
           </select>
         </label>
-        <label class="board__control board__checkbox">
+        <label class="board__control board__checkbox" title="Hide the ads outside your risk budget">
           <input v-model="hideRisky" type="checkbox" />
           <span>Hide risky</span>
         </label>
@@ -65,7 +66,14 @@ const hiddenCount = computed(() => props.ads.length - visibleAds.value.length)
       The board is empty right now. Refresh to check again.
     </p>
 
-    <TransitionGroup v-else name="ads" tag="div" class="board__list">
+    <TransitionGroup
+      v-else
+      name="ads"
+      tag="div"
+      class="board__list"
+      :class="{ 'is-refreshing': loading }"
+      :aria-busy="loading ? 'true' : undefined"
+    >
       <AdCard
         v-for="ad in visibleAds"
         :key="ad.adId"
@@ -131,6 +139,15 @@ const hiddenCount = computed(() => props.ads.length - visibleAds.value.length)
   .board__list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+/* Dim only when a refresh takes a while; a quick one must not flicker. */
+.board__list {
+  transition: opacity 0.2s 0.4s;
+}
+
+.board__list.is-refreshing {
+  opacity: 0.6;
 }
 
 .board__empty,

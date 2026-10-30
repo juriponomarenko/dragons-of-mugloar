@@ -131,7 +131,7 @@ Everything above is tunable through `mugloar.strategy.*` properties (see `Strate
 - Unaffordable or unknown purchases are refused locally, because the game charges a turn even for a failed purchase.
 - The autoplayer tolerates transient upstream errors and expired ads: it refreshes the board and retries, and gives up after three consecutive failures instead of looping forever.
 - A rate limit is treated differently. A strong dragon makes around ten requests a second and the API answers HTTP 429 after roughly six hundred of them (about turn 300), so the player waits it out rather than counting it as a failure: 15, 30, 45 and then 60 seconds at a time, for up to six waits in a row. The CLI waits out a rate limit on game start too, and reports a game it could not start rather than aborting the run.
-- Upstream HTTP 410 ("Game Over") closes the session even if local bookkeeping disagrees; an autoplay run that hits it ends cleanly with that reason instead of failing.
+- Upstream HTTP 410 ("Game Over") closes the session even if local bookkeeping disagrees, and so does a 404, since the game server forgets a game after a while of inactivity (a bad ad id is a 400 and a bad item a 200, so a 404 is never about the request). An autoplay run that hits either ends cleanly with that reason, and the UI shows the final state.
 - Each action on a game runs under that game's lock, so a manual click and an autoplay request cannot interleave. Reads never wait for it: state, purchases and failed ad families are published together as one immutable snapshot that is swapped atomically (so a response never mixes two turns), and the history and the board are snapshots too, so the UI can follow a game the server is playing.
 - The CLI's exit code is non‑zero when any game missed the target or could not be started, and `main` applies it when the context closes, so the run works as a regression check in a shell or CI.
 
@@ -209,7 +209,7 @@ Mobile‑first CSS with a single breakpoint at 900px (board + sidebar) and 1100p
 
 ## Known limitations and possible next steps
 
-- Game sessions live in the backend's memory. They are lost on restart and never evicted; a real deployment would put them behind the same `GameSessionRegistry` interface in Redis or a database and expire finished games.
+- Game sessions live in the backend's memory. They are lost on restart and never evicted; a real deployment would put them behind the same `GameSessionRegistry` interface in Redis or a database and expire finished games. The game server itself forgets a game after a while of inactivity, so an old game reopened later ends with "game over" at its last known score.
 - There is no authentication: anyone who can reach the API can drive any game it knows. Fine for a test task, not for the internet.
 - The success rates behind the probability labels are assumed, not measured: the game never exposes numbers, and this project has not run enough games to calibrate them. They are one table in `Probability`, and every other strategy knob is a property.
 - The autoplayer runs a game on one request thread; a long "finish game" call can take a minute or two. Streaming turns over SSE would make that nicer for the UI.

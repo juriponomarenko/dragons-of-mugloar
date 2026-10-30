@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, watch } from 'vue'
+import { onBeforeUnmount, watch, watchEffect } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGameStore } from '@/stores/game'
 import StatusBar from '@/components/StatusBar.vue'
@@ -8,7 +8,7 @@ import ShopPanel from '@/components/ShopPanel.vue'
 import AutoplayControls from '@/components/AutoplayControls.vue'
 import ReputationPanel from '@/components/ReputationPanel.vue'
 import HistoryLog from '@/components/HistoryLog.vue'
-import ErrorBanner from '@/components/ErrorBanner.vue'
+import MessageBanner from '@/components/MessageBanner.vue'
 import GameOverBanner from '@/components/GameOverBanner.vue'
 import LastTurnToast from '@/components/LastTurnToast.vue'
 
@@ -24,7 +24,15 @@ watch(
   { immediate: true },
 )
 
-onBeforeUnmount(() => store.stopAutoplay())
+const APP_TITLE = 'Dragons of Mugloar'
+watchEffect(() => {
+  document.title = store.game ? `Game ${store.game.gameId} · ${APP_TITLE}` : APP_TITLE
+})
+
+onBeforeUnmount(() => {
+  store.stopAutoplay()
+  document.title = APP_TITLE
+})
 
 async function newGame() {
   store.stopAutoplay()
@@ -45,10 +53,15 @@ function retry() {
   </div>
 
   <template v-else-if="store.game">
+    <h1 class="visually-hidden">Game {{ store.game.gameId }}</h1>
     <StatusBar :game="store.game" :loading="store.loading.action" />
 
-    <ErrorBanner :message="store.error" :details="store.errorDetails" @dismiss="store.clearError" />
-    <ErrorBanner :message="store.notice" tone="info" @dismiss="store.clearNotice" />
+    <MessageBanner
+      :message="store.error"
+      :details="store.errorDetails"
+      @dismiss="store.clearError"
+    />
+    <MessageBanner :message="store.notice" tone="info" @dismiss="store.clearNotice" />
 
     <GameOverBanner
       v-if="store.isGameOver"
@@ -120,7 +133,11 @@ function retry() {
     <p class="muted">
       Game <span class="mono">{{ gameId }}</span> may well exist, but the backend did not answer.
     </p>
-    <ErrorBanner :message="store.error" :details="store.errorDetails" @dismiss="store.clearError" />
+    <MessageBanner
+      :message="store.error"
+      :details="store.errorDetails"
+      @dismiss="store.clearError"
+    />
     <div class="not-found__actions">
       <button class="btn btn-primary" type="button" :disabled="store.loading.game" @click="retry">
         Try again

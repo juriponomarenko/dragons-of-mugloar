@@ -31,6 +31,8 @@ public class GameEngine {
 
 	private static final int HTTP_GONE = 410;
 
+	private static final int HTTP_NOT_FOUND = 404;
+
 	private final MugloarApiClient client;
 
 	private final AdDecoder adDecoder;
@@ -121,8 +123,10 @@ public class GameEngine {
 	}
 
 	/**
-	 * The API answers HTTP 410 once a game is over. Should our bookkeeping disagree with the
-	 * server (e.g. after a lost response), trust the server and close the session.
+	 * The API answers HTTP 410 once a game is over, and HTTP 404 once it has forgotten a game
+	 * (it does so after a while of inactivity; a bad ad id is a 400, a bad item a 200). Should our
+	 * bookkeeping disagree with the server, trust the server and close the session: the last
+	 * score we saw stands.
 	 */
 	private static <T> T guardGameOver(GameSession session, Supplier<T> call) {
 		try {
@@ -133,6 +137,11 @@ public class GameEngine {
 				log.info("Game {} reported as over by the API", session.gameId());
 				session.markOver();
 				throw new GameOverException(session.gameId());
+			}
+			if (ex.getStatus() == HTTP_NOT_FOUND) {
+				log.info("Game {} is no longer known to the API", session.gameId());
+				session.markOver();
+				throw new GameOverException(session.gameId(), "the game server no longer knows it");
 			}
 			throw ex;
 		}

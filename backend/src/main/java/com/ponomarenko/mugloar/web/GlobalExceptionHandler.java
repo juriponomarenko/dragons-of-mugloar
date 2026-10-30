@@ -45,13 +45,9 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 		return problem(HttpStatus.CONFLICT, "Game over", ex.getMessage());
 	}
 
-	@ExceptionHandler(InvalidActionException.class)
-	ProblemDetail invalidAction(InvalidActionException ex) {
-		return problem(HttpStatus.UNPROCESSABLE_ENTITY, "Action not possible", ex.getMessage());
-	}
-
-	@ExceptionHandler(NoMoveAvailableException.class)
-	ProblemDetail noMove(NoMoveAvailableException ex) {
+	/** The request was fine, the game state does not allow it: expired ad, unaffordable item, empty board. */
+	@ExceptionHandler({ InvalidActionException.class, NoMoveAvailableException.class })
+	ProblemDetail actionNotPossible(RuntimeException ex) {
 		return problem(HttpStatus.UNPROCESSABLE_ENTITY, "Action not possible", ex.getMessage());
 	}
 

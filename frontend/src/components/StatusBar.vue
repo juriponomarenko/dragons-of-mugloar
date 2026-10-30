@@ -14,7 +14,8 @@ const livesClass = computed(() => {
 </script>
 
 <template>
-  <div class="status card" role="status" aria-live="polite" :class="{ 'is-loading': loading }">
+  <!-- Not a live region: the toast announces each turn, so the numbers here stay quiet. -->
+  <div class="status card" :class="{ 'is-loading': loading }">
     <div class="stat stat--lives" :class="livesClass">
       <span class="stat__label">Lives</span>
       <span class="stat__value">
@@ -27,11 +28,11 @@ const livesClass = computed(() => {
     </div>
     <div class="stat stat--gold">
       <span class="stat__label">Gold</span>
-      <span class="stat__value">{{ gold(game.gold) }}</span>
+      <span :key="game.gold" class="stat__value stat__value--live">{{ gold(game.gold) }}</span>
     </div>
     <div class="stat stat--score">
       <span class="stat__label">Score</span>
-      <span class="stat__value">{{ gold(game.score) }}</span>
+      <span :key="game.score" class="stat__value stat__value--live">{{ gold(game.score) }}</span>
     </div>
     <div class="stat">
       <span class="stat__label">Level</span>
@@ -86,6 +87,24 @@ const livesClass = computed(() => {
   gap: 6px;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Re-mounted on every change (keyed on the value), so a change is briefly highlighted. */
+.stat__value--live {
+  align-self: flex-start;
+  margin: 0 -4px;
+  padding: 0 4px;
+  border-radius: 4px;
+  animation: stat-flash 0.7s ease-out;
+}
+
+@keyframes stat-flash {
+  from {
+    background: var(--accent-soft);
+  }
+  to {
+    background: transparent;
+  }
 }
 
 .stat--gold .stat__value {

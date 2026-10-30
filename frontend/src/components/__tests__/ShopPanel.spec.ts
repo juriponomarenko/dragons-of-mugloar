@@ -32,7 +32,7 @@ describe('ShopPanel', () => {
 
     expect(buttons[0]!.attributes('disabled')).toBeUndefined()
     expect(buttons[1]!.attributes('disabled')).toBeDefined()
-    expect(buttons[1]!.attributes('title')).toBe('Need 40 more gold')
+    expect(wrapper.text()).toContain('40 more needed')
   })
 
   it('emits buy with the item id', async () => {

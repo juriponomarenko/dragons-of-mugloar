@@ -60,7 +60,9 @@ const expiresSoon = computed(() => props.ad.expiresIn <= 1)
         <dd>{{ compact(ad.expectedValue) }}</dd>
       </div>
       <div>
-        <dt title="Expected gold minus the expected cost of a lost life (and a reputation discount); the advisor ranks by this">
+        <dt
+          title="Expected gold minus the expected cost of a lost life (and a reputation discount); the advisor ranks by this"
+        >
           Score
         </dt>
         <dd>{{ compact(ad.score) }}</dd>
@@ -81,6 +83,7 @@ const expiresSoon = computed(() => props.ad.expiresIn <= 1)
         :class="ad.recommended ? 'btn-primary' : ''"
         type="button"
         :disabled="disabled"
+        :aria-label="`Solve: ${ad.message}`"
         @click="emit('solve', ad.adId)"
       >
         Solve

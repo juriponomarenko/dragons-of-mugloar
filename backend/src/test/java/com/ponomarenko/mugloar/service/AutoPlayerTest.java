@@ -34,7 +34,7 @@ class AutoPlayerTest {
 	void setUp() {
 		api = new FakeMugloarApi();
 		engine = new GameEngine(api, new AdDecoder());
-		StrategyProperties props = TestFixtures.defaultStrategy();
+		StrategyProperties props = TestFixtures.testStrategy();
 		GameStrategy strategy = new GameStrategy(new AdEvaluator(props), new ShoppingPolicy(props));
 		autoPlayer = new AutoPlayer(engine, strategy, props, pauses::add);
 		session = engine.start();

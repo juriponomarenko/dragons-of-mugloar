@@ -14,7 +14,6 @@ import com.ponomarenko.mugloar.web.dto.GameView;
 import com.ponomarenko.mugloar.web.dto.ShopItemView;
 import com.ponomarenko.mugloar.web.dto.TurnView;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.Pattern;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,17 +25,12 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * REST API consumed by the frontend. Identifiers coming from the client are validated against
- * a strict pattern before they are ever forwarded to the upstream game API.
+ * REST API consumed by the frontend. Every identifier coming from the client is a
+ * {@link ValidId}, checked before it is ever forwarded to the upstream game API.
  */
 @RestController
 @RequestMapping("/api/games")
 public class GameController {
-
-	/** Ids are short alphanumeric tokens; anything else is rejected before reaching the upstream API. */
-	static final String ID_PATTERN = "^[A-Za-z0-9_-]{1,64}$";
-
-	private static final String ID_MESSAGE = "must be 1-64 characters of letters, digits, '-' or '_'";
 
 	private final GameService gameService;
 
@@ -56,47 +50,47 @@ public class GameController {
 	}
 
 	@GetMapping("/{gameId}")
-	public GameView getGame(@PathVariable @Pattern(regexp = ID_PATTERN, message = ID_MESSAGE) String gameId) {
+	public GameView getGame(@PathVariable @ValidId String gameId) {
 		return ViewMapper.game(gameService.getGame(gameId));
 	}
 
 	@GetMapping("/{gameId}/ads")
-	public List<AdView> getAds(@PathVariable @Pattern(regexp = ID_PATTERN, message = ID_MESSAGE) String gameId) {
+	public List<AdView> getAds(@PathVariable @ValidId String gameId) {
 		return ViewMapper.ads(gameService.getAds(gameId));
 	}
 
 	@PostMapping("/{gameId}/ads/{adId}/solve")
-	public TurnView solve(@PathVariable @Pattern(regexp = ID_PATTERN, message = ID_MESSAGE) String gameId,
-			@PathVariable @Pattern(regexp = ID_PATTERN, message = ID_MESSAGE) String adId) {
+	public TurnView solve(@PathVariable @ValidId String gameId,
+			@PathVariable @ValidId String adId) {
 		TurnRecord record = gameService.solve(gameId, adId);
 		return ViewMapper.turn(record, gameService.getGame(gameId));
 	}
 
 	@GetMapping("/{gameId}/shop")
-	public List<ShopItemView> getShop(@PathVariable @Pattern(regexp = ID_PATTERN, message = ID_MESSAGE) String gameId) {
+	public List<ShopItemView> getShop(@PathVariable @ValidId String gameId) {
 		return gameService.getShop(gameId).stream().map(ViewMapper::shopItem).toList();
 	}
 
 	@PostMapping("/{gameId}/shop/{itemId}/buy")
-	public TurnView buy(@PathVariable @Pattern(regexp = ID_PATTERN, message = ID_MESSAGE) String gameId,
-			@PathVariable @Pattern(regexp = ID_PATTERN, message = ID_MESSAGE) String itemId) {
+	public TurnView buy(@PathVariable @ValidId String gameId,
+			@PathVariable @ValidId String itemId) {
 		TurnRecord record = gameService.buy(gameId, itemId);
 		return ViewMapper.turn(record, gameService.getGame(gameId));
 	}
 
 	@PostMapping("/{gameId}/reputation")
-	public Reputation investigate(@PathVariable @Pattern(regexp = ID_PATTERN, message = ID_MESSAGE) String gameId) {
+	public Reputation investigate(@PathVariable @ValidId String gameId) {
 		return gameService.investigate(gameId);
 	}
 
 	@PostMapping("/{gameId}/autoplay/step")
-	public TurnView autoplayStep(@PathVariable @Pattern(regexp = ID_PATTERN, message = ID_MESSAGE) String gameId) {
+	public TurnView autoplayStep(@PathVariable @ValidId String gameId) {
 		TurnRecord record = gameService.autoplayStep(gameId);
 		return ViewMapper.turn(record, gameService.getGame(gameId));
 	}
 
 	@PostMapping("/{gameId}/autoplay")
-	public AutoplayView autoplay(@PathVariable @Pattern(regexp = ID_PATTERN, message = ID_MESSAGE) String gameId,
+	public AutoplayView autoplay(@PathVariable @ValidId String gameId,
 			@RequestBody(required = false) @Valid AutoplayRequest request) {
 		// No bound of its own unless the body gives one: the strategy's max-turns cap always applies.
 		int maxTurns = request != null ? request.maxTurnsOr(Integer.MAX_VALUE) : Integer.MAX_VALUE;
@@ -105,7 +99,7 @@ public class GameController {
 	}
 
 	@GetMapping("/{gameId}/history")
-	public List<TurnView> history(@PathVariable @Pattern(regexp = ID_PATTERN, message = ID_MESSAGE) String gameId) {
+	public List<TurnView> history(@PathVariable @ValidId String gameId) {
 		GameSession session = gameService.getGame(gameId);
 		return gameService.history(gameId).stream().map(t -> ViewMapper.turn(t, session)).toList();
 	}

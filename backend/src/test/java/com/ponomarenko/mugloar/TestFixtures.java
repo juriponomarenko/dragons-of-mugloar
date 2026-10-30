@@ -25,7 +25,11 @@ public final class TestFixtures {
 	private TestFixtures() {
 	}
 
-	public static StrategyProperties defaultStrategy() {
+	/**
+	 * Small round numbers for rule-level tests (potion at two lives, 50 gold reserve, a life worth 50).
+	 * The shipping defaults are exercised by {@code StrategyDefaultsTest}.
+	 */
+	public static StrategyProperties testStrategy() {
 		return new StrategyProperties(2, 50, List.of("cs", "gas", "ch"), true, 0.8, 0.6, 0.5, 50,
 				List.of("steal", "kidnap"), 0.6, 5000, List.of("super awesome diamond"), 2);
 	}

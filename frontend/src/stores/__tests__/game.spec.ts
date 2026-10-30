@@ -151,11 +151,17 @@ describe('game store', () => {
     expect(store.game?.gameId).toBe('B')
     expect(store.history).toHaveLength(0)
     expect(store.isGameOver).toBe(false)
+    // the late request must not leave the new game locked
+    expect(store.busy).toBe(false)
+    api.solveAd.mockResolvedValue(turnView({ state: gameView({ gameId: 'B', turn: 1 }) }))
+    expect(await store.solveAd('a1')).not.toBeNull()
   })
 
   it('reloads everything after an action whose outcome is unknown', async () => {
     api.startGame.mockResolvedValue(gameView({ gameId: 'g1' }))
-    api.solveAd.mockRejectedValue(new ApiError(0, 'Backend unreachable', 'Could not reach the backend'))
+    api.solveAd.mockRejectedValue(
+      new ApiError(0, 'Backend unreachable', 'Could not reach the backend'),
+    )
     api.getGame.mockResolvedValue(gameView({ gameId: 'g1', turn: 1, gold: 50, score: 50 }))
     api.getHistory.mockResolvedValue([turnView()])
     const store = useGameStore()
@@ -356,6 +362,22 @@ describe('game store', () => {
     expect(store.error).toBe('the game is over')
     expect(store.isGameOver).toBe(true)
     expect(store.game?.score).toBe(800)
+  })
+
+  it('shows the final state when the board reports the game as over', async () => {
+    api.startGame.mockResolvedValue(gameView({ gameId: 'g1' }))
+    const store = useGameStore()
+    await store.startGame()
+    const over = new ApiError(409, 'Game over', 'the game server no longer knows it')
+    api.getAds.mockRejectedValue(over)
+    api.getShop.mockRejectedValue(over)
+    api.getGame.mockResolvedValue(gameView({ gameId: 'g1', lives: 0, gameOver: true, score: 420 }))
+
+    await store.refreshBoard()
+
+    expect(store.isGameOver).toBe(true)
+    expect(store.game?.score).toBe(420)
+    expect(store.error).toContain('no longer knows')
   })
 
   it('investigates reputation', async () => {

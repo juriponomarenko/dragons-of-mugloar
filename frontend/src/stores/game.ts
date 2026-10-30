@@ -111,6 +111,9 @@ export const useGameStore = defineStore('game', () => {
   /** Forgets the game on screen; any response still in flight for it will be dropped. */
   function reset(): void {
     generation++
+    // a request of the old generation skips its own cleanup, so the flags are cleared here
+    loading.action = false
+    loading.board = false
     game.value = null
     ads.value = []
     shop.value = []
@@ -144,6 +147,10 @@ export const useGameStore = defineStore('game', () => {
     } catch (cause) {
       if (isCurrent(requested)) {
         captureError(cause)
+        if (isStaleStateError(cause)) {
+          // the game ended behind our back, or the game server forgot it: show its final state
+          await reloadState(id, requested)
+        }
       }
     } finally {
       loading.board = false
@@ -241,8 +248,14 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
-  /** Runs one game action, records its turn and refreshes the board. Returns the turn or null. */
-  async function performAction(action: (id: string) => Promise<TurnView>): Promise<TurnView | null> {
+  /**
+   * Runs one request that changes the game, applies its result and refreshes the board. Single
+   * actions and the server-side finish share it: same guard, same error capture, same recovery.
+   */
+  async function mutate<T>(
+    request: (id: string) => Promise<T>,
+    apply: (result: T) => void,
+  ): Promise<T | null> {
     const id = gameId.value
     if (!id || loading.action) {
       return null
@@ -251,13 +264,13 @@ export const useGameStore = defineStore('game', () => {
     clearError()
     loading.action = true
     try {
-      const turn = await action(id)
+      const result = await request(id)
       if (!isCurrent(requested)) {
         return null
       }
-      applyTurn(turn)
+      apply(result)
       await refreshBoard()
-      return turn
+      return result
     } catch (cause) {
       if (isCurrent(requested)) {
         captureError(cause)
@@ -271,22 +284,30 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
+  /** Runs one game action and records its turn. Returns the turn or null. */
+  const performAction = (action: (id: string) => Promise<TurnView>) => mutate(action, applyTurn)
+
   /** Brings the screen back in line with the server after an action that may have changed it. */
   async function recoverFrom(cause: unknown, id: string, requested: number): Promise<void> {
     if (isUncertainOutcome(cause)) {
       await reloadFromServer(id, requested)
     } else if (isStaleStateError(cause)) {
-      try {
-        const state = await gameApi.getGame(id)
-        if (isCurrent(requested)) {
-          game.value = state
-        }
-      } catch {
-        // keep what we have; the original error is already on screen
-      }
+      await reloadState(id, requested)
       if (isCurrent(requested)) {
         await refreshBoard()
       }
+    }
+  }
+
+  /** Reloads lives, gold, score and turn alone; the board is the caller's business. */
+  async function reloadState(id: string, requested: number): Promise<void> {
+    try {
+      const state = await gameApi.getGame(id)
+      if (isCurrent(requested)) {
+        game.value = state
+      }
+    } catch {
+      // keep what we have; the original error is already on screen
     }
   }
 
@@ -365,37 +386,22 @@ export const useGameStore = defineStore('game', () => {
 
   /** Hands the whole rest of the game to the backend in one request. */
   async function finishGame(): Promise<void> {
-    const id = gameId.value
-    if (!id || busy.value || isGameOver.value) {
+    if (busy.value || isGameOver.value) {
       return
     }
-    const requested = generation
-    clearError()
     clearNotice()
-    loading.action = true
-    try {
-      const outcome = await gameApi.autoplay(id)
-      if (!isCurrent(requested)) {
-        return
-      }
-      game.value = outcome.state
-      history.value = [...history.value, ...outcome.turns]
-      lastTurn.value = outcome.turns[outcome.turns.length - 1] ?? lastTurn.value
-      if (!outcome.gameOver) {
-        // Not a failure: the run stopped early (turn cap, upstream trouble) and the game goes on.
-        notice.value = outcome.stoppedBecause
-      }
-      await refreshBoard()
-    } catch (cause) {
-      if (isCurrent(requested)) {
-        captureError(cause)
-        await recoverFrom(cause, id, requested)
-      }
-    } finally {
-      if (isCurrent(requested)) {
-        loading.action = false
-      }
-    }
+    await mutate(
+      (id) => gameApi.autoplay(id),
+      (outcome) => {
+        game.value = outcome.state
+        history.value = [...history.value, ...outcome.turns]
+        lastTurn.value = outcome.turns[outcome.turns.length - 1] ?? lastTurn.value
+        if (!outcome.gameOver) {
+          // Not a failure: the run stopped early (turn cap, upstream trouble) and the game goes on.
+          notice.value = outcome.stoppedBecause
+        }
+      },
+    )
   }
 
   return {

@@ -16,6 +16,11 @@ export function compact(value: number): string {
   return Number.isInteger(rounded) ? rounded.toString() : rounded.toFixed(1)
 }
 
+/** Milliseconds as seconds with at most one decimal, e.g. 500 -> "0.5 s", 2000 -> "2 s". */
+export function seconds(ms: number): string {
+  return `${compact(ms / 1000)} s`
+}
+
 /** "1 turn" / "3 turns". */
 export function turns(count: number): string {
   return `${count} ${count === 1 ? 'turn' : 'turns'}`

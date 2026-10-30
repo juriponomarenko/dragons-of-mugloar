@@ -140,6 +140,15 @@ class GameEngineTest {
 	}
 
 	@Test
+	void aGameTheApiNoLongerKnowsIsOver() {
+		api.messageFailures.push(new MugloarApiException(404, "", "not found"));
+
+		assertThatExceptionOfType(GameOverException.class).isThrownBy(() -> engine.fetchAds(session))
+				.withMessageContaining("the game server no longer knows it");
+		assertThat(session.isOver()).isTrue();
+	}
+
+	@Test
 	void gameOverOnTheShopClosesTheSessionToo() {
 		api.shopFailures.push(new MugloarApiException(410, "{\"status\":\"Game Over\"}", "gone"));
 
