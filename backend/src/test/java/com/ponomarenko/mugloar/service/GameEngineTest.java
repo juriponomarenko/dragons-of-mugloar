@@ -6,6 +6,7 @@ import com.ponomarenko.mugloar.client.MugloarApiException;
 import com.ponomarenko.mugloar.client.dto.AdDto;
 import com.ponomarenko.mugloar.domain.Ad;
 import com.ponomarenko.mugloar.domain.AdDecoder;
+import com.ponomarenko.mugloar.domain.Encryption;
 import com.ponomarenko.mugloar.domain.Probability;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -107,6 +108,35 @@ class GameEngineTest {
 
 		engine.solve(session, "trap2", "", false);
 		assertThat(session.failedFamilies()).containsEntry("steal super awesome diamond|impossible", 2);
+	}
+
+	@Test
+	void solvingAKnownAdKeepsItsTextAndFamilyWhateverTheBoardShows() {
+		// the autoplayer passes the ad it chose; a board refresh in between must not lose it
+		Ad chosen = new Ad("hard", "Steal super awesome diamond pan from Bob", 300, 5, Probability.IMPOSSIBLE,
+				"Impossible", Encryption.NONE);
+
+		TurnRecord record = engine.solve(session, chosen, "best eligible", true);
+
+		assertThat(record.description()).isEqualTo("Steal super awesome diamond pan from Bob");
+		assertThat(record.family()).isEqualTo("steal super awesome diamond|impossible");
+		assertThat(session.failedFamilies()).containsEntry("steal super awesome diamond|impossible", 1);
+	}
+
+	@Test
+	void aSnapshotPublishesStateAndPurchasesTogether() {
+		api.gold = 150;
+		session = engine.start();
+		GameSession.Snapshot before = session.snapshot();
+
+		engine.buy(session, "cs", "", false);
+
+		GameSession.Snapshot after = session.snapshot();
+		assertThat(before.state().turn()).isZero();
+		assertThat(before.purchases()).isEmpty();
+		assertThat(after.state().turn()).isEqualTo(1);
+		assertThat(after.state().gold()).isEqualTo(50);
+		assertThat(after.purchases()).containsEntry("cs", 1);
 	}
 
 	@Test

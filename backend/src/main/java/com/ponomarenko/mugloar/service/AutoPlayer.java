@@ -68,13 +68,13 @@ public class AutoPlayer {
 		if (session.isOver()) {
 			throw new GameOverException(session.gameId());
 		}
-		GameState state = session.state();
+		GameSession.Snapshot now = session.snapshot();
 		List<Ad> ads = engine.fetchAds(session);
 		List<ShopItem> shop = engine.fetchShop(session);
-		Decision decision = strategy.decide(state, ads, shop, session.purchases(), session.failedFamilies());
+		Decision decision = strategy.decide(now.state(), ads, shop, now.purchases(), now.failedFamilies());
 		return switch (decision) {
 			case Decision.Buy buy -> engine.buy(session, buy.item().id(), buy.reason(), true);
-			case Decision.Solve solve -> engine.solve(session, solve.assessment().ad().adId(), solve.reason(), true);
+			case Decision.Solve solve -> engine.solve(session, solve.assessment().ad(), solve.reason(), true);
 		};
 	}
 

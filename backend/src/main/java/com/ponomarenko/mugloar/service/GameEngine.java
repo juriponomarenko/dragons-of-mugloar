@@ -3,7 +3,6 @@ package com.ponomarenko.mugloar.service;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.function.Supplier;
 
 import com.ponomarenko.mugloar.client.MugloarApiClient;
@@ -66,11 +65,20 @@ public class GameEngine {
 	}
 
 	/**
-	 * Attempts an ad. Its text and family come from the last fetched board; an id that is not on
-	 * it (a stale manual click) is still forwarded, since the API has the final say on whether it
-	 * is valid.
+	 * Attempts the ad with this id (a manual click). Its text and family come from the last
+	 * fetched board, looked up before the call so a board refresh meanwhile cannot lose them; an
+	 * id that is not on the board is still forwarded, since the API has the final say.
 	 */
 	public TurnRecord solve(GameSession session, String adId, String reason, boolean automated) {
+		return solve(session, adId, session.adOnBoard(adId).orElse(null), reason, automated);
+	}
+
+	/** Attempts a known ad (the autoplayer's pick), whatever the board shows by now. */
+	public TurnRecord solve(GameSession session, Ad ad, String reason, boolean automated) {
+		return solve(session, ad.adId(), ad, reason, automated);
+	}
+
+	private TurnRecord solve(GameSession session, String adId, Ad ad, String reason, boolean automated) {
 		requireActive(session);
 		SolveResponse response;
 		try {
@@ -83,9 +91,8 @@ public class GameEngine {
 			throw ex;
 		}
 		GameState after = session.state().after(response);
-		Optional<Ad> ad = session.adOnBoard(adId);
 		TurnRecord record = session.record(new TurnRecord(after.turn(), ActionType.SOLVE, adId,
-				ad.map(Ad::message).orElse(adId), ad.map(Ad::family).orElse(""), response.success(),
+				ad != null ? ad.message() : adId, ad != null ? ad.family() : "", response.success(),
 				response.message(), reason, automated, after, Map.of(), Instant.now()));
 		log.debug("Game {} turn {}: solve {} -> {} (lives={}, gold={}, score={})", after.gameId(), after.turn(), adId,
 				response.success() ? "success" : "failure", after.lives(), after.gold(), after.score());

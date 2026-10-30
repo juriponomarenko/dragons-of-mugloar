@@ -55,14 +55,16 @@ public class GameService {
 	public List<AdAssessment> getAds(String gameId) {
 		GameSession session = registry.require(gameId);
 		List<Ad> ads = engine.fetchAds(session);
-		return adEvaluator.evaluate(ads, session.state(), engine.fetchShop(session), session.failedFamilies());
+		GameSession.Snapshot now = session.snapshot();
+		return adEvaluator.evaluate(ads, now.state(), engine.fetchShop(session), now.failedFamilies());
 	}
 
 	public List<ShopOffer> getShop(String gameId) {
 		GameSession session = registry.require(gameId);
 		List<ShopItem> shop = engine.fetchShop(session);
-		GameState state = session.state();
-		Map<String, Integer> purchases = session.purchases();
+		GameSession.Snapshot now = session.snapshot();
+		GameState state = now.state();
+		Map<String, Integer> purchases = now.purchases();
 		return shop.stream()
 				.map(item -> new ShopOffer(item, state.gold() >= item.cost(), purchases.getOrDefault(item.id(), 0),
 						!state.isOver() && shoppingPolicy.isSuggested(item, state, shop, purchases)))

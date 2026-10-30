@@ -22,8 +22,10 @@ final class ViewMapper {
 	private ViewMapper() {
 	}
 
+	/** One snapshot, so the state and the purchases in a response belong to the same turn. */
 	static GameView game(GameSession session) {
-		return game(session.state(), session.purchases(), session.createdAt());
+		GameSession.Snapshot now = session.snapshot();
+		return game(now.state(), now.purchases(), session.createdAt());
 	}
 
 	static GameView game(GameState state, Map<String, Integer> purchases, java.time.Instant createdAt) {

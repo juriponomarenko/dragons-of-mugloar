@@ -99,6 +99,73 @@ describe('game store', () => {
     expect(store.lastGameId).toBeNull()
     expect(localStorage.getItem('mugloar.lastGameId')).toBeNull()
     expect(store.error).toBe('unknown')
+    expect(store.loadStatus).toBe('not-found')
+  })
+
+  it('tells a backend outage apart from an unknown game', async () => {
+    localStorage.setItem('mugloar.lastGameId', 'g9')
+    setActivePinia(createPinia())
+    api.getGame.mockRejectedValue(new ApiError(503, 'Game API error', 'upstream down'))
+    api.getHistory.mockRejectedValue(new ApiError(503, 'Game API error', 'upstream down'))
+    const store = useGameStore()
+
+    expect(await store.loadGame('g9')).toBe(false)
+
+    expect(store.loadStatus).toBe('failed')
+    expect(store.error).toBe('upstream down')
+    expect(store.lastGameId).toBe('g9')
+  })
+
+  it('reloads the state and history when the same game is opened again', async () => {
+    api.getGame.mockResolvedValue(gameView({ gameId: 'g2', turn: 3 }))
+    api.getHistory.mockResolvedValue([turnView()])
+    const store = useGameStore()
+    await store.loadGame('g2')
+    api.getGame.mockResolvedValue(gameView({ gameId: 'g2', turn: 7, score: 300 }))
+    api.getHistory.mockResolvedValue([turnView(), turnView({ turn: 2 })])
+
+    expect(await store.loadGame('g2')).toBe(true)
+
+    expect(store.game?.turn).toBe(7)
+    expect(store.history).toHaveLength(2)
+  })
+
+  it('drops a late answer about a game that is no longer on screen', async () => {
+    api.startGame.mockResolvedValueOnce(gameView({ gameId: 'A' }))
+    let finishA: (value: Awaited<ReturnType<typeof gameApi.autoplay>>) => void = () => {}
+    api.autoplay.mockReturnValueOnce(new Promise((resolve) => (finishA = resolve)))
+    const store = useGameStore()
+    await store.startGame()
+    const pendingFinish = store.finishGame()
+
+    api.startGame.mockResolvedValueOnce(gameView({ gameId: 'B' }))
+    await store.startGame()
+    finishA({
+      state: gameView({ gameId: 'A', gameOver: true, score: 999 }),
+      turns: [turnView({ automated: true })],
+      gameOver: true,
+      stoppedBecause: 'Game over',
+    })
+    await pendingFinish
+
+    expect(store.game?.gameId).toBe('B')
+    expect(store.history).toHaveLength(0)
+    expect(store.isGameOver).toBe(false)
+  })
+
+  it('reloads everything after an action whose outcome is unknown', async () => {
+    api.startGame.mockResolvedValue(gameView({ gameId: 'g1' }))
+    api.solveAd.mockRejectedValue(new ApiError(0, 'Backend unreachable', 'Could not reach the backend'))
+    api.getGame.mockResolvedValue(gameView({ gameId: 'g1', turn: 1, gold: 50, score: 50 }))
+    api.getHistory.mockResolvedValue([turnView()])
+    const store = useGameStore()
+    await store.startGame()
+
+    await store.solveAd('a1')
+
+    expect(store.error).toBe('Could not reach the backend')
+    expect(store.game?.score).toBe(50)
+    expect(store.history).toHaveLength(1)
   })
 
   it('solving an ad records the turn, updates the state and refreshes the board', async () => {

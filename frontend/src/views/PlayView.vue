@@ -33,6 +33,10 @@ async function newGame() {
     await router.push({ name: 'play', params: { gameId: id } })
   }
 }
+
+function retry() {
+  void store.loadGame(props.gameId)
+}
 </script>
 
 <template>
@@ -97,7 +101,7 @@ async function newGame() {
     <LastTurnToast :turn="store.lastTurn" />
   </template>
 
-  <div v-else class="card not-found">
+  <div v-else-if="store.loadStatus === 'not-found'" class="card not-found">
     <h2>Game not found</h2>
     <p class="muted">
       This server does not know game <span class="mono">{{ gameId }}</span
@@ -106,6 +110,20 @@ async function newGame() {
     <div class="not-found__actions">
       <button class="btn btn-primary" type="button" :disabled="store.loading.game" @click="newGame">
         Start a new game
+      </button>
+      <RouterLink class="btn" to="/">Back to start</RouterLink>
+    </div>
+  </div>
+
+  <div v-else class="card not-found">
+    <h2>Could not load the game</h2>
+    <p class="muted">
+      Game <span class="mono">{{ gameId }}</span> may well exist, but the backend did not answer.
+    </p>
+    <ErrorBanner :message="store.error" :details="store.errorDetails" @dismiss="store.clearError" />
+    <div class="not-found__actions">
+      <button class="btn btn-primary" type="button" :disabled="store.loading.game" @click="retry">
+        Try again
       </button>
       <RouterLink class="btn" to="/">Back to start</RouterLink>
     </div>

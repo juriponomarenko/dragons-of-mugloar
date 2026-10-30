@@ -21,10 +21,22 @@ import com.ponomarenko.mugloar.domain.ShopItem;
  * and which ad families have failed.
  * <p>
  * Actions run under the session lock so that a manual click and an autoplay request can never
- * interleave inside one game. Reads never take the lock: every piece of state is an immutable
- * value that is swapped atomically, so the UI can follow a game while the server is playing it.
+ * interleave inside one game. Reads never take the lock: the state, purchases and failed
+ * families are published together as one immutable {@link Snapshot} that is swapped atomically,
+ * so a reader never sees the state of one turn next to the purchases of another, and the UI can
+ * follow a game while the server is playing it.
  */
 public class GameSession {
+
+	/**
+	 * What a reader needs about a game at one instant.
+	 *
+	 * @param state lives, gold, level, score and turn
+	 * @param purchases how often each item id has been bought, in order of first purchase
+	 * @param failedFamilies how often ads of each family (see {@link Ad#family()}) have failed
+	 */
+	public record Snapshot(GameState state, Map<String, Integer> purchases, Map<String, Integer> failedFamilies) {
+	}
 
 	private final ReentrantLock lock = new ReentrantLock();
 
@@ -32,28 +44,35 @@ public class GameSession {
 
 	private final List<TurnRecord> history = new CopyOnWriteArrayList<>();
 
-	private volatile GameState state;
-
-	/** How often each item id has been bought, in order of first purchase. */
-	private volatile Map<String, Integer> purchases = Map.of();
-
-	/** How often ads of each family (see {@link Ad#family()}) have failed in this game. */
-	private volatile Map<String, Integer> failedFamilies = Map.of();
+	private volatile Snapshot snapshot;
 
 	private volatile List<ShopItem> shop;
 
 	private volatile Map<String, Ad> lastBoard = Map.of();
 
 	public GameSession(GameState initial) {
-		this.state = initial;
+		this.snapshot = new Snapshot(initial, Map.of(), Map.of());
 	}
 
 	public String gameId() {
-		return state.gameId();
+		return snapshot.state().gameId();
+	}
+
+	/** The state, purchases and failed families as they stand right now, consistent with each other. */
+	public Snapshot snapshot() {
+		return snapshot;
 	}
 
 	public GameState state() {
-		return state;
+		return snapshot.state();
+	}
+
+	public Map<String, Integer> purchases() {
+		return snapshot.purchases();
+	}
+
+	public Map<String, Integer> failedFamilies() {
+		return snapshot.failedFamilies();
 	}
 
 	public Instant createdAt() {
@@ -61,7 +80,7 @@ public class GameSession {
 	}
 
 	public boolean isOver() {
-		return state.isOver();
+		return state().isOver();
 	}
 
 	/** Runs {@code work} while holding this session's lock. */
@@ -79,6 +98,9 @@ public class GameSession {
 	TurnRecord record(TurnRecord turn) {
 		lock.lock();
 		try {
+			Snapshot current = snapshot;
+			Map<String, Integer> purchases = current.purchases();
+			Map<String, Integer> failedFamilies = current.failedFamilies();
 			if (turn.action() == ActionType.BUY && turn.success()) {
 				purchases = incremented(purchases, turn.targetId());
 			}
@@ -87,7 +109,7 @@ public class GameSession {
 			}
 			TurnRecord stored = turn.withPurchases(purchases);
 			history.add(stored);
-			state = stored.stateAfter();
+			snapshot = new Snapshot(stored.stateAfter(), purchases, failedFamilies);
 			return stored;
 		}
 		finally {
@@ -105,8 +127,10 @@ public class GameSession {
 	void markOver() {
 		lock.lock();
 		try {
-			GameState s = state;
-			state = new GameState(s.gameId(), 0, s.gold(), s.level(), s.score(), s.highScore(), s.turn());
+			Snapshot current = snapshot;
+			GameState s = current.state();
+			snapshot = new Snapshot(new GameState(s.gameId(), 0, s.gold(), s.level(), s.score(), s.highScore(), s.turn()),
+					current.purchases(), current.failedFamilies());
 		}
 		finally {
 			lock.unlock();
@@ -117,15 +141,7 @@ public class GameSession {
 		return List.copyOf(history);
 	}
 
-	public Map<String, Integer> purchases() {
-		return purchases;
-	}
-
-	public Map<String, Integer> failedFamilies() {
-		return failedFamilies;
-	}
-
-	/** Remembers the most recently fetched board so actions can be described by ad text and family. */
+	/** Remembers the most recently fetched board so manual actions can be described by ad text and family. */
 	void rememberBoard(List<Ad> ads) {
 		lastBoard = ads.stream().collect(Collectors.toUnmodifiableMap(Ad::adId, Function.identity(), (a, b) -> a));
 	}

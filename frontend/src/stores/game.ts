@@ -8,6 +8,9 @@ const LAST_GAME_KEY = 'mugloar.lastGameId'
 export const AUTOPLAY_MIN_DELAY = 100
 export const AUTOPLAY_MAX_DELAY = 2000
 
+/** How the game named in the URL came to be (or not be) on screen. */
+export type LoadStatus = 'idle' | 'loading' | 'ready' | 'not-found' | 'failed'
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -32,9 +35,29 @@ function writeLastGameId(gameId: string | null): void {
   }
 }
 
+/** A rejected action means the game moved on without us (expired ad, server-side game over). */
+function isStaleStateError(cause: unknown): boolean {
+  return cause instanceof ApiError && (cause.status === 422 || cause.status === 409)
+}
+
+/**
+ * The request may or may not have reached the game: a dropped connection or a gateway error
+ * says nothing about whether the backend went on and took the turn.
+ */
+function isUncertainOutcome(cause: unknown): boolean {
+  return (
+    cause instanceof ApiError &&
+    (cause.isNetworkError || cause.status === 502 || cause.status === 503 || cause.status === 504)
+  )
+}
+
 /**
  * All state for the game currently on screen. Every mutation goes through an action so the
  * components stay dumb, and every action funnels errors into `error` for a single banner.
+ *
+ * Every switch of game bumps a generation counter, and every response is checked against the
+ * generation it was requested in, so a slow answer about a game that is no longer on screen is
+ * dropped instead of overwriting the one that is.
  */
 export const useGameStore = defineStore('game', () => {
   const game = ref<GameView | null>(null)
@@ -48,8 +71,12 @@ export const useGameStore = defineStore('game', () => {
   const notice = ref<string | null>(null)
   const errorDetails = ref<string[]>([])
   const loading = reactive({ game: false, board: false, action: false })
+  const loadStatus = ref<LoadStatus>('idle')
   const autoplay = reactive({ running: false, stopRequested: false, delayMs: 500 })
   const lastGameId = ref<string | null>(readLastGameId())
+
+  let generation = 0
+  const isCurrent = (requested: number) => requested === generation
 
   const gameId = computed(() => game.value?.gameId ?? null)
   const isGameOver = computed(() => game.value?.gameOver ?? false)
@@ -81,13 +108,16 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
+  /** Forgets the game on screen; any response still in flight for it will be dropped. */
   function reset(): void {
+    generation++
     game.value = null
     ads.value = []
     shop.value = []
     history.value = []
     reputation.value = null
     lastTurn.value = null
+    loadStatus.value = 'idle'
     clearError()
     clearNotice()
   }
@@ -103,109 +133,160 @@ export const useGameStore = defineStore('game', () => {
     if (!id || isGameOver.value) {
       return
     }
+    const requested = generation
     loading.board = true
     try {
       const [nextAds, nextShop] = await Promise.all([gameApi.getAds(id), gameApi.getShop(id)])
-      ads.value = nextAds
-      shop.value = nextShop
+      if (isCurrent(requested)) {
+        ads.value = nextAds
+        shop.value = nextShop
+      }
     } catch (cause) {
-      captureError(cause)
+      if (isCurrent(requested)) {
+        captureError(cause)
+      }
     } finally {
       loading.board = false
+    }
+  }
+
+  /** Reloads the state and the history from the server, then the board. */
+  async function reloadFromServer(id: string, requested: number): Promise<void> {
+    try {
+      const [state, turns] = await Promise.all([gameApi.getGame(id), gameApi.getHistory(id)])
+      if (isCurrent(requested)) {
+        game.value = state
+        history.value = turns
+      }
+    } catch {
+      // keep what we have; the original error is already on screen
+    }
+    if (isCurrent(requested)) {
+      await refreshBoard()
     }
   }
 
   /** Starts a brand-new game and loads its board. Returns the new game id or null on failure. */
   async function startGame(): Promise<string | null> {
     reset()
+    const requested = generation
     loading.game = true
+    loadStatus.value = 'loading'
     try {
-      game.value = await gameApi.startGame()
-      lastGameId.value = game.value.gameId
-      writeLastGameId(game.value.gameId)
+      const started = await gameApi.startGame()
+      if (!isCurrent(requested)) {
+        return null
+      }
+      game.value = started
+      loadStatus.value = 'ready'
+      lastGameId.value = started.gameId
+      writeLastGameId(started.gameId)
       await refreshBoard()
-      return game.value.gameId
+      return started.gameId
     } catch (cause) {
-      captureError(cause)
+      if (isCurrent(requested)) {
+        captureError(cause)
+        loadStatus.value = 'failed'
+      }
       return null
     } finally {
-      loading.game = false
+      if (isCurrent(requested)) {
+        loading.game = false
+      }
     }
   }
 
-  /** Loads an existing game (e.g. after a page refresh). Returns false if it is unknown. */
+  /**
+   * Loads an existing game (e.g. after a page refresh). Returns false when it could not be
+   * loaded; `loadStatus` tells whether the game is unknown or the server could not be reached.
+   */
   async function loadGame(id: string): Promise<boolean> {
     if (gameId.value === id && game.value) {
-      // Already on screen (e.g. navigated away and back): just pick up any board changes.
-      await refreshBoard()
+      // Already on screen (e.g. navigated away and back): the server may have moved on meanwhile.
+      await reloadFromServer(id, generation)
       return true
     }
     reset()
+    const requested = generation
     loading.game = true
+    loadStatus.value = 'loading'
     try {
       const [state, turns] = await Promise.all([gameApi.getGame(id), gameApi.getHistory(id)])
+      if (!isCurrent(requested)) {
+        return false
+      }
       game.value = state
       history.value = turns
+      loadStatus.value = 'ready'
       lastGameId.value = id
       writeLastGameId(id)
       await refreshBoard()
       return true
     } catch (cause) {
+      if (!isCurrent(requested)) {
+        return false
+      }
       captureError(cause)
-      if (cause instanceof ApiError && cause.status === 404 && lastGameId.value === id) {
+      const notFound = cause instanceof ApiError && cause.status === 404
+      loadStatus.value = notFound ? 'not-found' : 'failed'
+      if (notFound && lastGameId.value === id) {
         lastGameId.value = null
         writeLastGameId(null)
       }
       return false
     } finally {
-      loading.game = false
+      if (isCurrent(requested)) {
+        loading.game = false
+      }
     }
   }
 
   /** Runs one game action, records its turn and refreshes the board. Returns the turn or null. */
-  async function performAction(
-    action: (id: string) => Promise<TurnView>,
-    { refresh = true }: { refresh?: boolean } = {},
-  ): Promise<TurnView | null> {
+  async function performAction(action: (id: string) => Promise<TurnView>): Promise<TurnView | null> {
     const id = gameId.value
     if (!id || loading.action) {
       return null
     }
+    const requested = generation
     clearError()
     loading.action = true
     try {
       const turn = await action(id)
-      applyTurn(turn)
-      if (refresh) {
-        await refreshBoard()
+      if (!isCurrent(requested)) {
+        return null
       }
+      applyTurn(turn)
+      await refreshBoard()
       return turn
     } catch (cause) {
-      captureError(cause)
-      if (isStaleStateError(cause)) {
-        await resync(id)
+      if (isCurrent(requested)) {
+        captureError(cause)
+        await recoverFrom(cause, id, requested)
       }
       return null
     } finally {
-      loading.action = false
+      if (isCurrent(requested)) {
+        loading.action = false
+      }
     }
   }
 
-  /** A rejected action means the game moved on without us (expired ad, server-side game over). */
-  function isStaleStateError(cause: unknown): boolean {
-    return cause instanceof ApiError && (cause.status === 422 || cause.status === 409)
-  }
-
-  async function resync(id: string): Promise<void> {
-    await resyncGame(id)
-    await refreshBoard()
-  }
-
-  async function resyncGame(id: string): Promise<void> {
-    try {
-      game.value = await gameApi.getGame(id)
-    } catch {
-      // keep what we have; the original error is already on screen
+  /** Brings the screen back in line with the server after an action that may have changed it. */
+  async function recoverFrom(cause: unknown, id: string, requested: number): Promise<void> {
+    if (isUncertainOutcome(cause)) {
+      await reloadFromServer(id, requested)
+    } else if (isStaleStateError(cause)) {
+      try {
+        const state = await gameApi.getGame(id)
+        if (isCurrent(requested)) {
+          game.value = state
+        }
+      } catch {
+        // keep what we have; the original error is already on screen
+      }
+      if (isCurrent(requested)) {
+        await refreshBoard()
+      }
     }
   }
 
@@ -218,11 +299,17 @@ export const useGameStore = defineStore('game', () => {
     if (!id) {
       return
     }
+    const requested = generation
     clearError()
     try {
-      reputation.value = await gameApi.investigate(id)
+      const result = await gameApi.investigate(id)
+      if (isCurrent(requested)) {
+        reputation.value = result
+      }
     } catch (cause) {
-      captureError(cause)
+      if (isCurrent(requested)) {
+        captureError(cause)
+      }
     }
   }
 
@@ -235,15 +322,21 @@ export const useGameStore = defineStore('game', () => {
     if (autoplay.running || !game.value || isGameOver.value) {
       return
     }
+    const requested = generation
     autoplay.running = true
     autoplay.stopRequested = false
     let boardIsStale = false
     try {
-      while (!autoplay.stopRequested && game.value && !game.value.gameOver) {
+      while (
+        isCurrent(requested) &&
+        !autoplay.stopRequested &&
+        game.value &&
+        !game.value.gameOver
+      ) {
         const turn = await performAction((id) => gameApi.autoplayStep(id))
         if (!turn) {
-          // the step failed before the board could be refreshed
-          boardIsStale = true
+          // the step failed before the board could be refreshed, or the game changed under us
+          boardIsStale = isCurrent(requested)
           break
         }
         if (turn.state.gameOver || autoplay.stopRequested) {
@@ -276,11 +369,15 @@ export const useGameStore = defineStore('game', () => {
     if (!id || busy.value || isGameOver.value) {
       return
     }
+    const requested = generation
     clearError()
     clearNotice()
     loading.action = true
     try {
       const outcome = await gameApi.autoplay(id)
+      if (!isCurrent(requested)) {
+        return
+      }
       game.value = outcome.state
       history.value = [...history.value, ...outcome.turns]
       lastTurn.value = outcome.turns[outcome.turns.length - 1] ?? lastTurn.value
@@ -288,14 +385,16 @@ export const useGameStore = defineStore('game', () => {
         // Not a failure: the run stopped early (turn cap, upstream trouble) and the game goes on.
         notice.value = outcome.stoppedBecause
       }
+      await refreshBoard()
     } catch (cause) {
-      captureError(cause)
-      if (isStaleStateError(cause)) {
-        await resyncGame(id)
+      if (isCurrent(requested)) {
+        captureError(cause)
+        await recoverFrom(cause, id, requested)
       }
     } finally {
-      loading.action = false
-      await refreshBoard()
+      if (isCurrent(requested)) {
+        loading.action = false
+      }
     }
   }
 
@@ -311,6 +410,7 @@ export const useGameStore = defineStore('game', () => {
     errorDetails,
     notice,
     loading,
+    loadStatus,
     autoplay,
     lastGameId,
     // getters

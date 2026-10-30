@@ -132,7 +132,7 @@ Everything above is tunable through `mugloar.strategy.*` properties (see `Strate
 - The autoplayer tolerates transient upstream errors and expired ads: it refreshes the board and retries, and gives up after three consecutive failures instead of looping forever.
 - A rate limit is treated differently. A strong dragon makes around ten requests a second and the API answers HTTP 429 after roughly six hundred of them (about turn 300), so the player waits it out rather than counting it as a failure: 15, 30, 45 and then 60 seconds at a time, for up to six waits in a row. The CLI waits out a rate limit on game start too, and reports a game it could not start rather than aborting the run.
 - Upstream HTTP 410 ("Game Over") closes the session even if local bookkeeping disagrees; an autoplay run that hits it ends cleanly with that reason instead of failing.
-- Each action on a game runs under that game's lock, so a manual click and an autoplay request cannot interleave. Reads never wait for it: state, history, purchases and the board are immutable snapshots swapped atomically, so the UI can follow a game the server is playing.
+- Each action on a game runs under that game's lock, so a manual click and an autoplay request cannot interleave. Reads never wait for it: state, purchases and failed ad families are published together as one immutable snapshot that is swapped atomically (so a response never mixes two turns), and the history and the board are snapshots too, so the UI can follow a game the server is playing.
 - The CLI's exit code is non‑zero when any game missed the target or could not be started, and `main` applies it when the context closes, so the run works as a regression check in a shell or CI.
 
 ### REST API
@@ -153,7 +153,7 @@ Everything above is tunable through `mugloar.strategy.*` properties (see `Strate
 
 ### Tests
 
-`./mvnw test` runs 100+ unit tests: label parsing and ad decoding, scoring and eligibility rules, shopping priorities, the turn loop against an in‑memory fake of the game API (including expired ads, upstream outages and game over), the HTTP client against `MockRestServiceServer`, and the controller with `MockMvc` (status codes, problem documents, validation).
+`./mvnw test` runs 130+ unit tests: label parsing and ad decoding, scoring and eligibility rules, shopping priorities, the shipping strategy defaults bound by Spring Boot (so a drifting default fails a test), the CLI runner's exit code, the turn loop against an in‑memory fake of the game API (including expired ads, upstream outages and game over), the HTTP client against `MockRestServiceServer`, and the controller with `MockMvc` (status codes, problem documents, validation).
 
 ### Results
 
@@ -197,7 +197,7 @@ src/utils/       Formatting helpers
 
 ### State management and error handling
 
-All server interaction goes through the Pinia store. Components receive props and emit events only, which keeps them trivially testable. Every action clears the previous error, records the returned turn, refreshes the board, and on failure shows the backend's problem detail in one banner; a rejected action (expired ad, game over) also resyncs the game state from the server. Autoplay is a cancellable loop in the store, and concurrent actions are ignored while one is in flight.
+All server interaction goes through the Pinia store. Components receive props and emit events only, which keeps them trivially testable. Every action clears the previous error, records the returned turn, refreshes the board, and on failure shows the backend's problem detail in one banner. A rejected action (expired ad, game over) resyncs the game state from the server; an action whose outcome is unknown (dropped connection, gateway error) reloads state and history, since the backend may have taken the turn anyway. Every switch of game bumps a generation counter and late answers about a game no longer on screen are dropped. Autoplay is a cancellable loop in the store, and concurrent actions are ignored while one is in flight. A game that cannot be loaded says whether it is unknown to the server or the server could not be reached, with a retry.
 
 ### Responsiveness and compatibility
 
