@@ -8,7 +8,7 @@ The original assignment is kept verbatim in [TASK.md](TASK.md).
 
 | Layer | Technology |
 | --- | --- |
-| Backend | Java 21, Spring Boot 4.1.2 (Spring Web MVC, RestClient, Bean Validation, Actuator), Maven wrapper, JUnit 5, AssertJ, Mockito |
+| Backend | Java 25, Spring Boot 4.1.2 (Spring Web MVC, RestClient, Bean Validation, Actuator), Maven wrapper, JUnit 5, AssertJ, Mockito |
 | Frontend | Vue 3.5, TypeScript, Vite 8, Pinia (state management), Vue Router, Vitest, ESLint + Prettier |
 
 ## Repository layout
@@ -37,7 +37,7 @@ Open <http://localhost:5173>, press **Start a new game**, and either pick ads yo
 
 ## Prerequisites
 
-- JDK 21 (e.g. [Eclipse Temurin](https://adoptium.net/)); `JAVA_HOME` must point to it for the Maven wrapper.
+- JDK 25 (e.g. [Eclipse Temurin](https://adoptium.net/)); `JAVA_HOME` must point to it for the Maven wrapper. The code uses nothing beyond Java 21, and Spring Boot 4.1 supports Java 17 to 27, so an older LTS works with `java.version` lowered in `backend/pom.xml`.
 - Node.js 22.18+ or 24+ (tested on 24 and 26) and [pnpm](https://pnpm.io/) 10+
 - No global Maven needed: the project ships the Maven wrapper (`mvnw`, `mvnw.cmd` on Windows).
 
