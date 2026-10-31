@@ -84,7 +84,8 @@ export const useGameStore = defineStore('game', () => {
   /** Something worth knowing that is not a failure, e.g. why a server-side run stopped early. */
   const notice = ref<string | null>(null)
   const errorDetails = ref<string[]>([])
-  const loading = reactive({ game: false, board: false, action: false })
+  /** `finish` marks a server-side run to the end, which can take minutes: the UI explains the wait. */
+  const loading = reactive({ game: false, board: false, action: false, finish: false })
   const loadStatus = ref<LoadStatus>('idle')
   const autoplay = reactive({ running: false, stopRequested: false, delayMs: 500 })
   const lastGameId = ref<string | null>(readLastGameId())
@@ -128,6 +129,7 @@ export const useGameStore = defineStore('game', () => {
     // a request of the old generation skips its own cleanup, so the flags are cleared here
     loading.action = false
     loading.board = false
+    loading.finish = false
     game.value = null
     ads.value = []
     shop.value = []
@@ -450,17 +452,25 @@ export const useGameStore = defineStore('game', () => {
     if (busy.value || isGameOver.value) {
       return
     }
+    const requested = generation
     clearNotice()
-    await mutate(
-      (id) => gameApi.autoplay(id),
-      (outcome) => {
-        applyTurns(outcome.state, outcome.turns)
-        if (!outcome.gameOver) {
-          // Not a failure: the run stopped early (turn cap, upstream trouble) and the game goes on.
-          notice.value = outcome.stoppedBecause
-        }
-      },
-    )
+    loading.finish = true
+    try {
+      await mutate(
+        (id) => gameApi.autoplay(id),
+        (outcome) => {
+          applyTurns(outcome.state, outcome.turns)
+          if (!outcome.gameOver) {
+            // Not a failure: the run stopped early (turn cap, upstream trouble) and the game goes on.
+            notice.value = outcome.stoppedBecause
+          }
+        },
+      )
+    } finally {
+      if (isCurrent(requested)) {
+        loading.finish = false
+      }
+    }
   }
 
   return {

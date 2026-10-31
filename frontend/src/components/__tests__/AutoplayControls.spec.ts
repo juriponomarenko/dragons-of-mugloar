@@ -33,6 +33,13 @@ describe('AutoplayControls', () => {
     expect(over.findAll('button').every((b) => b.attributes('disabled') !== undefined)).toBe(true)
   })
 
+  it('says so on the button while the server is finishing the game', () => {
+    const wrapper = mount(AutoplayControls, { props: { ...base, busy: true, finishing: true } })
+
+    expect(wrapper.text()).toContain('Finishing…')
+    expect(wrapper.text()).not.toContain('Finish game')
+  })
+
   it('reports delay changes and the advisor turn count', async () => {
     const wrapper = mount(AutoplayControls, { props: { ...base, automatedTurns: 7 } })
 

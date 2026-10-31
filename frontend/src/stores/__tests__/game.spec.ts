@@ -432,6 +432,28 @@ describe('game store', () => {
     expect(store.error).toBeNull()
   })
 
+  it('flags a server-side finish while it runs and clears it after', async () => {
+    api.startGame.mockResolvedValue(gameView({ gameId: 'g1' }))
+    let finish: (value: Awaited<ReturnType<typeof gameApi.autoplay>>) => void = () => {}
+    api.autoplay.mockReturnValueOnce(new Promise((resolve) => (finish = resolve)))
+    const store = useGameStore()
+    await store.startGame()
+
+    const pending = store.finishGame()
+    await vi.waitFor(() => expect(store.loading.finish).toBe(true))
+    expect(store.busy).toBe(true)
+    finish({
+      state: gameView({ gameId: 'g1', turn: 1, gameOver: true, lives: 0 }),
+      turns: [turnView({ automated: true })],
+      gameOver: true,
+      stoppedBecause: 'Game over',
+    })
+    await pending
+
+    expect(store.loading.finish).toBe(false)
+    expect(store.busy).toBe(false)
+  })
+
   it('shows why a server-side run stopped early', async () => {
     api.startGame.mockResolvedValue(gameView({ gameId: 'g1' }))
     api.autoplay.mockResolvedValue({
@@ -461,6 +483,7 @@ describe('game store', () => {
     expect(store.error).toBe('the game is over')
     expect(store.isGameOver).toBe(true)
     expect(store.game?.score).toBe(800)
+    expect(store.loading.finish).toBe(false)
   })
 
   it('shows the final state when the board reports the game as over', async () => {

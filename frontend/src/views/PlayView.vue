@@ -6,6 +6,7 @@ import StatusBar from '@/components/StatusBar.vue'
 import AdBoard from '@/components/AdBoard.vue'
 import ShopPanel from '@/components/ShopPanel.vue'
 import AutoplayControls from '@/components/AutoplayControls.vue'
+import FinishingPanel from '@/components/FinishingPanel.vue'
 import ReputationPanel from '@/components/ReputationPanel.vue'
 import HistoryLog from '@/components/HistoryLog.vue'
 import MessageBanner from '@/components/MessageBanner.vue'
@@ -73,7 +74,9 @@ function retry() {
 
     <div class="play-grid">
       <section class="play-main">
+        <FinishingPanel v-if="store.loading.finish" />
         <AdBoard
+          v-else
           :ads="store.ads"
           :loading="store.loading.board"
           :disabled="store.busy || store.isGameOver"
@@ -87,6 +90,7 @@ function retry() {
           :running="store.autoplay.running"
           :busy="store.busy"
           :game-over="store.isGameOver"
+          :finishing="store.loading.finish"
           :delay-ms="store.autoplay.delayMs"
           :automated-turns="store.automatedTurns"
           @step="store.autoplayStep"

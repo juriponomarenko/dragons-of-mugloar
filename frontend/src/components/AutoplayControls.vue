@@ -2,7 +2,14 @@
 import { AUTOPLAY_MAX_DELAY, AUTOPLAY_MIN_DELAY } from '@/stores/game'
 import { seconds } from '@/utils/format'
 
-defineProps<{ running: boolean; busy: boolean; gameOver: boolean; automatedTurns: number }>()
+defineProps<{
+  running: boolean
+  busy: boolean
+  gameOver: boolean
+  automatedTurns: number
+  /** A server-side run to the end is in flight. */
+  finishing?: boolean
+}>()
 
 /** Pause between autoplay turns, owned by the parent (the store clamps it). */
 const delayMs = defineModel<number>('delayMs', { required: true })
@@ -45,7 +52,7 @@ function onDelayInput(event: Event) {
         title="Plays the whole game on the server and returns the result"
         @click="emit('finish')"
       >
-        ⏭ Finish game
+        {{ finishing ? '⏭ Finishing…' : '⏭ Finish game' }}
       </button>
     </div>
     <label class="autoplay__speed">

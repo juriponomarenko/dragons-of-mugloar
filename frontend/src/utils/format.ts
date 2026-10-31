@@ -21,6 +21,14 @@ export function seconds(ms: number): string {
   return `${compact(ms / 1000)} s`
 }
 
+/** Elapsed time as "12 s" or "2 min 05 s". */
+export function duration(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000))
+  const minutes = Math.floor(total / 60)
+  const secs = total % 60
+  return minutes ? `${minutes} min ${secs.toString().padStart(2, '0')} s` : `${secs} s`
+}
+
 /** "1 turn" / "3 turns". */
 export function turns(count: number): string {
   return `${count} ${count === 1 ? 'turn' : 'turns'}`
