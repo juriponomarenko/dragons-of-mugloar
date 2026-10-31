@@ -502,14 +502,25 @@ describe('game store', () => {
     expect(store.error).toContain('no longer knows')
   })
 
-  it('investigates reputation', async () => {
+  it('investigating reputation records the turn it costs and refreshes the board', async () => {
     api.startGame.mockResolvedValue(gameView({ gameId: 'g1' }))
-    api.investigate.mockResolvedValue({ people: 1, state: -2, underworld: 0 })
+    const turn = turnView({
+      action: 'INVESTIGATE',
+      targetId: 'reputation',
+      description: 'Reputation investigation',
+      message: 'People 1, state -2, underworld 0',
+      state: gameView({ gameId: 'g1', turn: 1 }),
+    })
+    api.investigate.mockResolvedValue({ reputation: { people: 1, state: -2, underworld: 0 }, turn })
     const store = useGameStore()
     await store.startGame()
+    api.getAds.mockClear()
 
     await store.investigate()
 
     expect(store.reputation).toEqual({ people: 1, state: -2, underworld: 0 })
+    expect(store.game?.turn).toBe(1)
+    expect(store.history).toEqual([turn])
+    expect(api.getAds).toHaveBeenCalledTimes(1)
   })
 })

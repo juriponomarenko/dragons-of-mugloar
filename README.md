@@ -1,6 +1,6 @@
 # Dragons of Mugloar
 
-A full-stack solution to the [Dragons of Mugloar](https://dragonsofmugloar.com/) test task: a Spring Boot backend that plays the game on its own and reaches the 1000-point target, and a Vue 3 frontend where a human plays the same game with the backend's advice. The assignment is kept verbatim in [TASK.md](TASK.md).
+A full-stack solution to the [Dragons of Mugloar](https://dragonsofmugloar.com/) test task: a Spring Boot backend that plays the game on its own and reaches the 1000-point target, and a Vue 3 frontend where a human plays the same game with the backend's advice. The assignment is kept verbatim in [TASK.md](TASK.md), followed by what probing the live API showed: what costs a turn, how ads expire and are encoded, the shop, measured success rates per label, what triggers the trap ads, error statuses and the idle timeout.
 
 | Layer | Technology |
 | --- | --- |
@@ -97,7 +97,7 @@ The label is part of the family key so that two failed *Hmmm* ads never discredi
 | `POST` | `/api/games/{id}/ads/{adId}/solve` | Attempt an ad |
 | `GET` | `/api/games/{id}/shop` | Shop items with affordability, purchase count and the strategy's suggestion |
 | `POST` | `/api/games/{id}/shop/{itemId}/buy` | Buy an item |
-| `POST` | `/api/games/{id}/reputation` | Investigate reputation |
+| `POST` | `/api/games/{id}/reputation` | Investigate reputation; the game charges a turn for it, which is recorded in the history and returned with the result |
 | `POST` | `/api/games/{id}/autoplay/step` | Let the strategy take one action |
 | `POST` | `/api/games/{id}/autoplay` | Let the strategy play to the end (optional body `{"maxTurns": n}`) |
 | `GET` | `/api/games/{id}/history` | Every action taken, with the strategy's reasoning and the state after it |
@@ -149,7 +149,7 @@ e2e/             Playwright tests (see Tests)
 - **Message board** with every ad decoded and assessed by the backend: success chance meter, expected value, advisor score, risk badge, expiry, and notes such as "May hurt reputation" or "Decoded from base64". The best eligible ad is marked **Recommended**; ads outside the risk budget are dimmed. Sort by score, reward, chance or urgency, or hide risky ads.
 - **Shop** showing what is affordable, how often each item was bought, and the item the strategy would buy now. Unaffordable items are disabled, so no turn is wasted on a failed purchase.
 - **Advisor**: play one turn, run autoplay turn by turn with an adjustable pause (the board refreshes after every step, so the reasoning can be watched), stop at any time, or hand the rest of the game to the server. While the server plays, a panel takes the controls' place: it explains what is happening, counts the time and rotates ten lines of dragon lore, since a good run takes minutes. A run that stops early says why in an info banner.
-- **History** of every action with the outcome, the API's message and, for advisor moves, the reason it was chosen; **reputation** on demand; a game-over banner that says whether the target was met; a toast after each action.
+- **History** of every action with the outcome, the API's message and, for advisor moves, the reason it was chosen; **reputation** on demand, which costs a turn and shows in the history; a game-over banner that says whether the target was met; a toast after each action.
 - **Resume**: the last game id is kept in `localStorage`, so a refresh or the "Resume last game" button brings you back.
 - **On a phone** the screen becomes three views, **Board**, **Shop** and **Advisor** (with reputation and the history), with a tab bar under the status bar: swipe, or tap a tab. The tabs carry badges: how many ads fit the risk budget, a dot when the strategy would buy something now, and a pulse while autoplay runs.
 
@@ -165,8 +165,8 @@ Below 900px the game screen is the three swipeable views; from 900px the board s
 
 | Suite | Command | What it covers |
 | --- | --- | --- |
-| Backend, 142 tests | `cd backend && ./mvnw test` | Label parsing and decoding, scoring and eligibility, shopping, the strategy defaults as bound by Spring Boot, the CLI exit code, the turn loop against an in-memory fake of the game API (expired ads, outages, lost answers, rate limits, game over), the HTTP client with `MockRestServiceServer`, the controller with `MockMvc` |
-| Frontend, 82 tests | `cd frontend && pnpm test:unit` | The API client against a mocked `fetch`, the store with a mocked API (actions, error resync, the autoplay loop with fake timers, server-side finish, forgotten games), the components with Vue Test Utils (rendering, sorting and filtering, events, the tab bar and the swipe track) |
+| Backend, 144 tests | `cd backend && ./mvnw test` | Label parsing and decoding, scoring and eligibility, shopping, the strategy defaults as bound by Spring Boot, the CLI exit code, the turn loop against an in-memory fake of the game API (expired ads, outages, lost answers, rate limits, game over), the HTTP client with `MockRestServiceServer`, the controller with `MockMvc` |
+| Frontend, 84 tests | `cd frontend && pnpm test:unit` | The API client against a mocked `fetch`, the store with a mocked API (actions, error resync, the autoplay loop with fake timers, server-side finish, forgotten games), the components with Vue Test Utils (rendering, sorting and filtering, events, the tab bar and the swipe track) |
 | End-to-end, 3 tests | `cd frontend && pnpm test:e2e` | Playwright in Chromium through the real frontend and backend: starting a game and resuming it from the start page, solving the recommended ad and buying a potion with the reward, and letting the advisor play one turn and then finish the game on the server |
 
 The end-to-end run starts both servers itself: the backend on its test classpath (`spring-boot:test-run`), where `E2eBackend` swaps the HTTP client for `StubMugloarApi`, a deterministic in-memory game, so the tests need no network and assert exact numbers; and the Vite dev server pointed at it. Both use ports of their own (8081 and 5174), so servers already running on 8080 and 5173 are left alone. It needs `JAVA_HOME` set, as the backend does, and, once, `pnpm exec playwright install chromium`. The frontend also runs `pnpm lint` (oxlint + ESLint), `pnpm type-check` (vue-tsc) and `pnpm build`.
@@ -178,7 +178,7 @@ The end-to-end run starts both servers itself: the backend on its test classpath
 - **One player's run blocks the others.** A "finish game" call holds its request thread and the game's lock for minutes, longer when a rate limit is waited out, so every other request on that game waits. Fix: finish in chunks of `maxTurns` from the UI first, then an asynchronous, cancellable run with progress pushed over SSE.
 - **No push updates.** A second browser on the same game sees a change only when it asks. Fix: an SSE stream of turns, merged by the store's existing turn merge.
 - **The rate limit caps a game** around turn 300 in practice; the waits keep it alive but slow. Fix: measure the limit and pace requests below it.
-- **Success rates are assumed**, not measured; they are one table in `Probability`. Fix: log label and outcome per ad over fifty CLI games and replace the table with the measured rates.
+- **The success rates behind the labels are a guess.** They are one table in `Probability`, and the results above were measured with it. A later probe of 418 solves (the table at the end of [TASK.md](TASK.md)) found real rates that differ in places: *Piece of cake* 93%, *Gamble* 65% and above *Hmmm* at 35%. Fix: replace the table with the measured rates and re-run the result batch.
 - **End-to-end coverage is thin.** Three happy paths in Chromium at desktop width; the phone layout, failures and the game-over path are checked by hand. Fix: a phone project in the Playwright config, and a stub game that can be told to fail.
 - **Requests are never cancelled.** Late answers are dropped by the generation counter rather than aborted. Fix: an `AbortController` per generation.
 

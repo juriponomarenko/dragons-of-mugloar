@@ -296,7 +296,39 @@ class GameEngineTest {
 	}
 
 	@Test
-	void investigateReturnsReputation() {
-		assertThat(engine.investigate(session).underworld()).isEqualTo(-1);
+	void investigationIsRecordedAsATurn() {
+		Investigation investigation = engine.investigate(session);
+
+		assertThat(investigation.reputation().underworld()).isEqualTo(-1);
+		TurnRecord record = investigation.turn();
+		assertThat(record.action()).isEqualTo(ActionType.INVESTIGATE);
+		assertThat(record.turn()).isEqualTo(1);
+		assertThat(record.message()).isEqualTo("People 1, state 0.5, underworld -1");
+		assertThat(record.stateAfter().lives()).isEqualTo(3);
+		assertThat(session.state().turn()).isEqualTo(1);
+		assertThat(session.history()).containsExactly(record);
+	}
+
+	@Test
+	void turnsAfterAnInvestigationLineUpWithTheApi() {
+		engine.investigate(session);
+
+		TurnRecord solved = engine.solve(session, "easy", "", false);
+
+		assertThat(solved.turn()).isEqualTo(2);
+		assertThat(session.history()).extracting(TurnRecord::turn).containsExactly(1, 2);
+	}
+
+	@Test
+	void anInvestigationDoesNotVouchForGoldAndLives() {
+		api.gold = 120;
+		session = engine.start();
+		api.loseNextBuyResponse = true;
+		assertThatExceptionOfType(MugloarApiException.class).isThrownBy(() -> engine.buy(session, "cs", "", false));
+		assertThat(session.isStateUncertain()).isTrue();
+
+		engine.investigate(session);
+
+		assertThat(session.isStateUncertain()).isTrue();
 	}
 }

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { TurnView } from '@/api/types'
+import { outcome } from '@/utils/format'
 
 const props = defineProps<{ turn: TurnView | null; durationMs?: number }>()
 
@@ -17,6 +18,11 @@ watch(
   },
 )
 
+const title = computed(() => {
+  const text = props.turn ? outcome(props.turn) : ''
+  return text.charAt(0).toUpperCase() + text.slice(1)
+})
+
 onBeforeUnmount(() => clearTimeout(timer))
 </script>
 
@@ -25,11 +31,11 @@ onBeforeUnmount(() => clearTimeout(timer))
     <div
       v-if="visible && turn"
       class="toast"
-      :class="turn.action === 'BUY' ? 'is-buy' : turn.success ? 'is-success' : 'is-failure'"
+      :class="turn.action !== 'SOLVE' ? 'is-buy' : turn.success ? 'is-success' : 'is-failure'"
       role="status"
       aria-live="polite"
     >
-      <strong>{{ turn.action === 'BUY' ? 'Bought' : turn.success ? 'Solved' : 'Failed' }}</strong>
+      <strong>{{ title }}</strong>
       <span class="toast__text">{{ turn.message || turn.description }}</span>
     </div>
   </Transition>

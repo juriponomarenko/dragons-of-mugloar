@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { TurnView } from '@/api/types'
-import { gold, time } from '@/utils/format'
+import { gold, outcome, time } from '@/utils/format'
 
 const props = defineProps<{ turns: TurnView[] }>()
 
@@ -43,14 +43,14 @@ const failures = computed(
             <span
               class="badge"
               :class="
-                turn.action === 'BUY'
+                turn.action !== 'SOLVE'
                   ? 'badge-muted'
                   : turn.success
                     ? 'badge-success'
                     : 'badge-danger'
               "
             >
-              {{ turn.action === 'BUY' ? 'bought' : turn.success ? 'solved' : 'failed' }}
+              {{ outcome(turn) }}
             </span>
             <span v-if="turn.automated" class="badge badge-accent" title="Chosen by the advisor"
               >advisor</span

@@ -34,6 +34,22 @@ describe('HistoryLog', () => {
     expect(wrapper.text()).toContain('3 actions · 1 solved · 1 failed')
   })
 
+  it('shows an investigation as a neutral turn that is neither solved nor failed', () => {
+    const turns = [
+      turnView({
+        action: 'INVESTIGATE',
+        description: 'Reputation investigation',
+        message: 'People 1, state -2, underworld 0',
+      }),
+    ]
+    const wrapper = mount(HistoryLog, { props: { turns } })
+
+    expect(wrapper.find('.badge').text()).toBe('investigated')
+    expect(wrapper.find('.badge').classes()).toContain('badge-muted')
+    expect(wrapper.text()).toContain('People 1, state -2, underworld 0')
+    expect(wrapper.text()).toContain('0 solved · 0 failed')
+  })
+
   it('collapses long histories', async () => {
     const turns = Array.from({ length: 25 }, (_, i) =>
       turnView({ turn: i + 1, at: `2026-10-27T10:00:${String(i).padStart(2, '0')}Z` }),

@@ -5,7 +5,6 @@ import java.util.Map;
 
 import com.ponomarenko.mugloar.domain.Ad;
 import com.ponomarenko.mugloar.domain.GameState;
-import com.ponomarenko.mugloar.domain.Reputation;
 import com.ponomarenko.mugloar.domain.ShopItem;
 import com.ponomarenko.mugloar.strategy.AdAssessment;
 import com.ponomarenko.mugloar.strategy.AdEvaluator;
@@ -81,7 +80,7 @@ public class GameService {
 		return session.locked(() -> engine.buy(session, itemId, "", false));
 	}
 
-	public Reputation investigate(String gameId) {
+	public Investigation investigate(String gameId) {
 		GameSession session = registry.require(gameId);
 		return session.locked(() -> engine.investigate(session));
 	}

@@ -129,6 +129,9 @@ class GameServiceTest {
 	void investigateDelegatesToTheApi() {
 		GameSession session = service.startGame();
 
-		assertThat(service.investigate(session.gameId()).people()).isEqualTo(1);
+		Investigation investigation = service.investigate(session.gameId());
+
+		assertThat(investigation.reputation().people()).isEqualTo(1);
+		assertThat(service.history(session.gameId())).containsExactly(investigation.turn());
 	}
 }

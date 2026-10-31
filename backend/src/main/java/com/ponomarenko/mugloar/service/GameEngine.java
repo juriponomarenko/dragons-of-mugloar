@@ -2,6 +2,7 @@ package com.ponomarenko.mugloar.service;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.OptionalInt;
 import java.util.function.Supplier;
@@ -62,9 +63,26 @@ public class GameEngine {
 				.toList());
 	}
 
-	public Reputation investigate(GameSession session) {
+	/**
+	 * Investigates the reputation. The API charges a turn for it, so it is recorded like any other
+	 * action, with the turn counted on from the last known one since the answer carries no state.
+	 */
+	public Investigation investigate(GameSession session) {
 		requireActive(session);
-		return Reputation.from(guardGameOver(session, () -> client.investigateReputation(session.gameId())));
+		Reputation reputation = Reputation.from(
+				guardGameOver(session, () -> client.investigateReputation(session.gameId())));
+		GameState after = session.state().afterInvestigation();
+		String found = String.format(Locale.ROOT, "People %s, state %s, underworld %s", compact(reputation.people()),
+				compact(reputation.state()), compact(reputation.underworld()));
+		TurnRecord record = session.recordInvestigation(new TurnRecord(after.turn(), ActionType.INVESTIGATE,
+				"reputation", "Reputation investigation", "", true, found, "", false, after, Map.of(), Instant.now()));
+		return new Investigation(reputation, record);
+	}
+
+	/** A reputation value with at most one decimal, dropping ".0". */
+	private static String compact(double value) {
+		double rounded = Math.round(value * 10) / 10.0;
+		return rounded == Math.rint(rounded) ? Long.toString((long) rounded) : Double.toString(rounded);
 	}
 
 	/**

@@ -127,7 +127,8 @@ public class GameSession {
 	}
 
 	/**
-	 * Stores a turn and returns it completed with the purchases as they stand afterwards.
+	 * Stores a turn whose answer carried the full state (a solve or a purchase) and returns it
+	 * completed with the purchases as they stand afterwards.
 	 *
 	 * @param goldDelta how much this action alone changed the gold (a reward, minus a price, or
 	 * nothing), when known. It settles an unanswered purchase: the gold the answer reports either
@@ -135,16 +136,31 @@ public class GameSession {
 	 * did and is counted. When the delta is unknown the purchase is counted rather than repeated.
 	 */
 	TurnRecord record(TurnRecord turn, OptionalInt goldDelta) {
+		return store(turn, goldDelta, true);
+	}
+
+	/**
+	 * Stores a reputation investigation: a turn whose answer carries no state. The turn is counted,
+	 * but an unanswered purchase stays pending and the state stays uncertain, since nothing in the
+	 * answer vouches for the gold or the lives.
+	 */
+	TurnRecord recordInvestigation(TurnRecord turn) {
+		return store(turn, OptionalInt.empty(), false);
+	}
+
+	private TurnRecord store(TurnRecord turn, OptionalInt goldDelta, boolean answerCarriesState) {
 		lock.lock();
 		try {
 			Snapshot current = snapshot;
 			Map<String, Integer> purchases = current.purchases();
 			Map<String, Integer> failedFamilies = current.failedFamilies();
-			ShopItem pending = pendingPurchase;
-			if (pending != null && wentThrough(current.state().gold(), turn.stateAfter().gold(), goldDelta)) {
-				purchases = incremented(purchases, pending.id());
+			if (answerCarriesState) {
+				ShopItem pending = pendingPurchase;
+				if (pending != null && wentThrough(current.state().gold(), turn.stateAfter().gold(), goldDelta)) {
+					purchases = incremented(purchases, pending.id());
+				}
+				pendingPurchase = null;
 			}
-			pendingPurchase = null;
 			if (turn.action() == ActionType.BUY && turn.success()) {
 				purchases = incremented(purchases, turn.targetId());
 			}
@@ -154,7 +170,9 @@ public class GameSession {
 			TurnRecord stored = turn.withPurchases(purchases);
 			history.add(stored);
 			snapshot = new Snapshot(stored.stateAfter(), purchases, failedFamilies);
-			stateUncertain = false; // every answer carries the full state
+			if (answerCarriesState) {
+				stateUncertain = false;
+			}
 			return stored;
 		}
 		finally {

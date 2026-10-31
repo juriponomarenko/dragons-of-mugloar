@@ -25,6 +25,11 @@ public record GameState(String gameId, int lives, int gold, int level, int score
 				response.turn());
 	}
 
+	/** A reputation investigation costs one turn and changes nothing else; its answer carries no state. */
+	public GameState afterInvestigation() {
+		return new GameState(gameId, lives, gold, level, score, highScore, turn + 1);
+	}
+
 	public boolean isOver() {
 		return lives <= 0;
 	}

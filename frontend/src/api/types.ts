@@ -42,7 +42,7 @@ export interface ShopItemView {
   suggested: boolean
 }
 
-export type ActionType = 'SOLVE' | 'BUY'
+export type ActionType = 'SOLVE' | 'BUY' | 'INVESTIGATE'
 
 export interface TurnView {
   turn: number
@@ -68,6 +68,12 @@ export interface Reputation {
   people: number
   state: number
   underworld: number
+}
+
+/** An investigation costs a turn in the game, so it comes back with the turn it was recorded as. */
+export interface InvestigationView {
+  reputation: Reputation
+  turn: TurnView
 }
 
 /** RFC 9457 problem document produced by the backend for every error. */

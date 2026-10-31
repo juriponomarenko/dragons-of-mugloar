@@ -378,24 +378,15 @@ export const useGameStore = defineStore('game', () => {
   const buyItem = (itemId: string) => performAction((id) => gameApi.buyItem(id, itemId))
   const autoplayStep = () => performAction((id) => gameApi.autoplayStep(id))
 
-  async function investigate(): Promise<void> {
-    const id = gameId.value
-    if (!id) {
-      return
-    }
-    const requested = generation
-    clearError()
-    try {
-      const result = await gameApi.investigate(id)
-      if (isCurrent(requested)) {
-        reputation.value = result
-      }
-    } catch (cause) {
-      if (isCurrent(requested)) {
-        captureError(cause)
-      }
-    }
-  }
+  /** Investigating costs a turn: it is recorded like any action, and the board ages with it. */
+  const investigate = () =>
+    mutate(
+      (id) => gameApi.investigate(id),
+      (result) => {
+        reputation.value = result.reputation
+        applyTurn(result.turn)
+      },
+    )
 
   /**
    * Lets the backend strategy play turn by turn, with a pause between turns so the player can

@@ -120,8 +120,12 @@ public class StubMugloarApi implements MugloarApiClient {
 
 	@Override
 	public ReputationResponse investigateReputation(String gameId) {
-		game(gameId);
-		return new ReputationResponse(1, 0, -1);
+		Game game = game(gameId);
+		synchronized (game) {
+			requireAlive(game);
+			game.turn++; // like the real API, an investigation costs a turn
+			return new ReputationResponse(1, 0.5, 0);
+		}
 	}
 
 	private Game game(String gameId) {
