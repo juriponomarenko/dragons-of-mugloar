@@ -164,9 +164,7 @@ function retry() {
       class="mobile-track"
     >
       <template #board>
-        <FinishingPanel v-if="store.loading.finish" />
         <AdBoard
-          v-else
           :ads="store.ads"
           :loading="store.loading.board"
           :disabled="store.busy || store.isGameOver"
@@ -184,7 +182,10 @@ function retry() {
       </template>
       <template #advisor>
         <div class="mobile-stack">
+          <!-- The wait is explained where Finish game was pressed, in place of the controls. -->
+          <FinishingPanel v-if="store.loading.finish" />
           <AutoplayControls
+            v-else
             :running="store.autoplay.running"
             :busy="store.busy"
             :game-over="store.isGameOver"
