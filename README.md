@@ -206,14 +206,14 @@ Mobile‑first CSS with a single breakpoint at 900px (board + sidebar) and 1100p
 
 ### Tests
 
-`pnpm test:unit` runs 48 Vitest tests: the API client against a mocked `fetch` (URL building, id validation, problem documents, network failures), the store with a mocked API (start/load/solve/buy, error resync, the autoplay loop with fake timers, server‑side finish), and the components with Vue Test Utils (rendering, sorting/filtering, emitted events, disabled states).
+`pnpm test:unit` runs 60 Vitest tests: the API client against a mocked `fetch` (URL building, id validation, problem documents, network failures), the store with a mocked API (start/load/solve/buy, error resync, the autoplay loop with fake timers, server‑side finish), and the components with Vue Test Utils (rendering, sorting/filtering, emitted events, disabled states).
 
 ## Known limitations and possible next steps
 
 - Game sessions live in the backend's memory. They are lost on restart and never evicted; a real deployment would put them behind the same `GameSessionRegistry` interface in Redis or a database and expire finished games. The game server itself forgets a game after a while of inactivity, so an old game reopened later ends with "game over" at its last known score.
 - There is no authentication: anyone who can reach the API can drive any game it knows. Fine for a test task, not for the internet.
 - The success rates behind the probability labels are assumed, not measured: the game never exposes numbers, and this project has not run enough games to calibrate them. They are one table in `Probability`, and every other strategy knob is a property.
-- The autoplayer runs a game on one request thread; a long "finish game" call can take a minute or two. Streaming turns over SSE would make that nicer for the UI.
+- The autoplayer runs a game on one request thread; a long "finish game" call can take a minute or two, and several minutes when the game API rate-limits the run and the player waits it out. Streaming turns over SSE would make that nicer for the UI; the turn-by-turn autoplay shows every move as it happens.
 - Frontend tests cover the client, the store and the components; the two views are exercised manually rather than with an end‑to‑end test.
 
 ## Use of AI tools

@@ -149,6 +149,7 @@ select {
   transition:
     background-color 0.15s,
     border-color 0.15s,
+    color 0.15s,
     transform 0.05s;
 }
 
