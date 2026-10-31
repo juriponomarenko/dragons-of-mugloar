@@ -182,7 +182,8 @@ A Vue 3 single‑page app in [frontend/](frontend/) that covers the "Frontend ad
 src/api/         Typed fetch client (gameApi) and the API's TypeScript shapes; ids are validated before they reach a URL
 src/stores/      Pinia store `game`: the single source of truth for the game on screen and all actions
 src/views/       HomeView (start / resume) and PlayView (the game screen), wired through Vue Router
-src/components/  StatusBar, AdBoard + AdCard, ShopPanel, AutoplayControls, ReputationPanel, HistoryLog, banners/toast
+src/components/  StatusBar, AdBoard + AdCard, ShopPanel, AutoplayControls, ReputationPanel, HistoryLog, banners/toast, ViewTabs + SwipeTrack (phone navigation)
+src/composables/ useMediaQuery
 src/utils/       Formatting helpers
 ```
 
@@ -195,6 +196,7 @@ src/utils/       Formatting helpers
 - **History** of every action with the outcome, the API's message and, for advisor moves, the reason it was chosen.
 - **Reputation** on demand, a game‑over banner that says whether the 1000‑point target was met, and a toast after each action.
 - The last game id is remembered in `localStorage`, so a refresh or the "Resume last game" button brings you back.
+- **On a phone** the game screen becomes three views, **Board**, **Shop** and **Advisor** (with reputation and the history), with a tab bar under the sticky status bar: swipe left or right, or tap a tab. The tabs carry small badges: how many ads fit your risk budget, a dot when the strategy would buy something right now, and a pulse while autoplay runs.
 
 ### State management and error handling
 
@@ -202,11 +204,11 @@ All server interaction goes through the Pinia store. Components receive props an
 
 ### Responsiveness and compatibility
 
-Mobile‑first CSS with a single breakpoint at 900px (board + sidebar) and 1100px (two‑column board). Only widely supported CSS is used (grid, flexbox, custom properties, `prefers-color-scheme` for a dark theme), no container queries or `:has()`. Vite targets modern evergreen browsers; the build is tested in Chromium and the layout at 375px, 768px and desktop widths.
+Below 900px the game screen is three swipeable views with a tab bar; from 900px up the board sits next to a sidebar, and from 1100px the board goes two‑column. The swiping is CSS scroll snapping (`scroll-snap-type: x mandatory`), so the browser provides the gesture, the momentum and the snap, and tells a vertical page scroll from a horizontal swipe on its own; no gesture library. A tap on a tab scrolls the track, a swipe that settles updates the tab, and views that are off screen are marked `inert`, so keyboard focus and screen readers stay on the visible one; the tab bar is a proper `tablist` with arrow-key navigation. The two layouts are picked by a reactive `matchMedia` query and share the store, so nothing is lost when a window crosses the breakpoint. Only widely supported CSS is used (grid, flexbox, custom properties, scroll snapping, `prefers-color-scheme` for a dark theme), no container queries or `:has()`. Vite targets modern evergreen browsers; the build is tested in Chromium and the layout at 375px, 768px and desktop widths.
 
 ### Tests
 
-`pnpm test:unit` runs 70 Vitest tests: the API client against a mocked `fetch` (URL building, id validation, problem documents, network failures), the store with a mocked API (start/load/solve/buy, error resync, the autoplay loop with fake timers, server‑side finish), and the components with Vue Test Utils (rendering, sorting/filtering, emitted events, disabled states).
+`pnpm test:unit` runs 82 Vitest tests: the API client against a mocked `fetch` (URL building, id validation, problem documents, network failures), the store with a mocked API (start/load/solve/buy, error resync, the autoplay loop with fake timers, server‑side finish), and the components with Vue Test Utils (rendering, sorting/filtering, emitted events, disabled states).
 
 ## Known limitations and possible next steps
 

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { onBeforeUnmount, watch, watchEffect } from 'vue'
+import { computed, onBeforeUnmount, ref, watch, watchEffect } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGameStore } from '@/stores/game'
+import { useMediaQuery } from '@/composables/useMediaQuery'
 import StatusBar from '@/components/StatusBar.vue'
 import AdBoard from '@/components/AdBoard.vue'
 import ShopPanel from '@/components/ShopPanel.vue'
@@ -12,6 +13,9 @@ import HistoryLog from '@/components/HistoryLog.vue'
 import MessageBanner from '@/components/MessageBanner.vue'
 import GameOverBanner from '@/components/GameOverBanner.vue'
 import LastTurnToast from '@/components/LastTurnToast.vue'
+import ViewTabs from '@/components/ViewTabs.vue'
+import SwipeTrack from '@/components/SwipeTrack.vue'
+import { VIEW_ICONS, type TabView } from '@/components/tabViews'
 
 const props = defineProps<{ gameId: string }>()
 const router = useRouter()
@@ -35,6 +39,36 @@ onBeforeUnmount(() => {
   document.title = APP_TITLE
 })
 
+/**
+ * From 900px up the board sits next to a sidebar; below that the screen is three views the
+ * player swipes between or picks from a tab bar. Both read the same store, so nothing is lost
+ * when a window crosses the breakpoint.
+ */
+const isDesktop = useMediaQuery('(min-width: 900px)')
+const activeView = ref('board')
+const mobileHeader = ref<HTMLElement | null>(null)
+const views = computed<TabView[]>(() => [
+  {
+    id: 'board',
+    label: 'Board',
+    icon: VIEW_ICONS.board,
+    badge: store.eligibleAds.length || undefined,
+  },
+  {
+    id: 'shop',
+    label: 'Shop',
+    icon: VIEW_ICONS.shop,
+    badge: store.suggestedItem?.affordable ? 'dot' : undefined,
+  },
+  {
+    id: 'advisor',
+    label: 'Advisor',
+    icon: VIEW_ICONS.advisor,
+    badge: store.autoplay.running ? 'live' : undefined,
+  },
+])
+const viewIds = computed(() => views.value.map((view) => view.id))
+
 async function newGame() {
   store.stopAutoplay()
   const id = await store.startGame()
@@ -55,7 +89,12 @@ function retry() {
 
   <template v-else-if="store.game">
     <h1 class="visually-hidden">Game {{ store.game.gameId }}</h1>
-    <StatusBar :game="store.game" :loading="store.loading.action" />
+
+    <StatusBar v-if="isDesktop" :game="store.game" :loading="store.loading.action" />
+    <div v-else ref="mobileHeader" class="mobile-header">
+      <StatusBar :game="store.game" :loading="store.loading.action" />
+      <ViewTabs v-model="activeView" :views="views" />
+    </div>
 
     <MessageBanner
       :message="store.error"
@@ -72,8 +111,59 @@ function retry() {
       @new-game="newGame"
     />
 
-    <div class="play-grid">
-      <section class="play-main">
+    <template v-if="isDesktop">
+      <div class="play-grid">
+        <section class="play-main">
+          <FinishingPanel v-if="store.loading.finish" />
+          <AdBoard
+            v-else
+            :ads="store.ads"
+            :loading="store.loading.board"
+            :disabled="store.busy || store.isGameOver"
+            @solve="store.solveAd"
+            @refresh="store.refreshBoard"
+          />
+        </section>
+
+        <aside class="play-side">
+          <AutoplayControls
+            :running="store.autoplay.running"
+            :busy="store.busy"
+            :game-over="store.isGameOver"
+            :finishing="store.loading.finish"
+            :delay-ms="store.autoplay.delayMs"
+            :automated-turns="store.automatedTurns"
+            @step="store.autoplayStep"
+            @run="store.runAutoplay"
+            @stop="store.stopAutoplay"
+            @finish="store.finishGame"
+            @update:delay-ms="store.setAutoplayDelay"
+          />
+          <ShopPanel
+            :items="store.shop"
+            :player-gold="store.game.gold"
+            :disabled="store.busy || store.isGameOver"
+            @buy="store.buyItem"
+          />
+          <ReputationPanel
+            :reputation="store.reputation"
+            :disabled="store.busy || store.isGameOver"
+            @investigate="store.investigate"
+          />
+        </aside>
+      </div>
+
+      <HistoryLog :turns="store.history" />
+    </template>
+
+    <SwipeTrack
+      v-else
+      v-model="activeView"
+      :views="viewIds"
+      :header="mobileHeader"
+      class="mobile-track"
+    >
+      <template #board>
         <FinishingPanel v-if="store.loading.finish" />
         <AdBoard
           v-else
@@ -83,37 +173,39 @@ function retry() {
           @solve="store.solveAd"
           @refresh="store.refreshBoard"
         />
-      </section>
-
-      <aside class="play-side">
-        <AutoplayControls
-          :running="store.autoplay.running"
-          :busy="store.busy"
-          :game-over="store.isGameOver"
-          :finishing="store.loading.finish"
-          :delay-ms="store.autoplay.delayMs"
-          :automated-turns="store.automatedTurns"
-          @step="store.autoplayStep"
-          @run="store.runAutoplay"
-          @stop="store.stopAutoplay"
-          @finish="store.finishGame"
-          @update:delay-ms="store.setAutoplayDelay"
-        />
+      </template>
+      <template #shop>
         <ShopPanel
           :items="store.shop"
           :player-gold="store.game.gold"
           :disabled="store.busy || store.isGameOver"
           @buy="store.buyItem"
         />
-        <ReputationPanel
-          :reputation="store.reputation"
-          :disabled="store.busy || store.isGameOver"
-          @investigate="store.investigate"
-        />
-      </aside>
-    </div>
-
-    <HistoryLog :turns="store.history" />
+      </template>
+      <template #advisor>
+        <div class="mobile-stack">
+          <AutoplayControls
+            :running="store.autoplay.running"
+            :busy="store.busy"
+            :game-over="store.isGameOver"
+            :finishing="store.loading.finish"
+            :delay-ms="store.autoplay.delayMs"
+            :automated-turns="store.automatedTurns"
+            @step="store.autoplayStep"
+            @run="store.runAutoplay"
+            @stop="store.stopAutoplay"
+            @finish="store.finishGame"
+            @update:delay-ms="store.setAutoplayDelay"
+          />
+          <ReputationPanel
+            :reputation="store.reputation"
+            :disabled="store.busy || store.isGameOver"
+            @investigate="store.investigate"
+          />
+          <HistoryLog :turns="store.history" />
+        </div>
+      </template>
+    </SwipeTrack>
 
     <LastTurnToast :turn="store.lastTurn" />
   </template>
@@ -157,10 +249,12 @@ function retry() {
   text-align: center;
 }
 
+/* Desktop (900px and up) */
 .play-grid {
   display: grid;
   gap: 16px;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);
+  align-items: start;
   margin-top: 16px;
 }
 
@@ -168,20 +262,29 @@ function retry() {
   display: grid;
   gap: 16px;
   align-content: start;
-}
-
-@media (min-width: 900px) {
-  .play-grid {
-    grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);
-    align-items: start;
-  }
-
   /* The status bar is sticky too (8px from the top, about 73px tall), so the sidebar
      sticks below it instead of sliding underneath. */
-  .play-side {
-    position: sticky;
-    top: 96px;
-  }
+  position: sticky;
+  top: 96px;
+}
+
+/* Phone: a sticky status bar and tab bar, then the swipeable views */
+.mobile-header {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  margin-top: -8px;
+  padding: 8px 0;
+  background: var(--bg);
+}
+
+.mobile-track {
+  margin-top: 8px;
+}
+
+.mobile-stack {
+  display: grid;
+  gap: 16px;
 }
 
 .not-found {
