@@ -178,6 +178,25 @@ class AutoPlayerTest {
 		// the solve answer brought the real state back: 250 - 100 for the claws + 20 reward
 		assertThat(session.state().gold()).isEqualTo(170);
 		assertThat(session.isStateUncertain()).isFalse();
+		// and the gold told that the purchase went through, so it is counted and not bought again
+		assertThat(session.purchases()).containsEntry("cs", 1);
+		assertThat(outcome.turns().get(0).purchasesAfter()).containsEntry("cs", 1);
+	}
+
+	@Test
+	void aPurchaseThatNeverReachedTheGameIsNotCountedEither() {
+		api.gold = 250;
+		session = engine.start();
+		api.dropNextBuyRequest = true;
+
+		AutoplayOutcome outcome = autoPlayer.playToEnd(session, 2);
+
+		// the retry solved an ad, whose answer showed the gold untouched: the purchase was never made
+		assertThat(outcome.turns()).extracting(TurnRecord::action).containsExactly(ActionType.SOLVE, ActionType.BUY);
+		assertThat(outcome.turns().get(0).purchasesAfter()).isEmpty();
+		// so the ladder bought it on the next turn, once
+		assertThat(api.boughtItemIds).containsExactly("cs");
+		assertThat(session.purchases()).containsEntry("cs", 1);
 	}
 
 	@Test

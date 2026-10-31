@@ -30,8 +30,8 @@ public class GameStrategy {
 
 	/**
 	 * @param stateUncertain whether an earlier action went unanswered, so {@code state} may be
-	 * behind the game; nothing is bought then, since a purchase is not safe to repeat, and the
-	 * solve that follows refreshes the state
+	 * behind the game; nothing is bought then (the engine would refuse it anyway), since a purchase
+	 * is not safe to repeat, and the solve that follows refreshes the state
 	 */
 	public Decision decide(GameState state, List<Ad> ads, List<ShopItem> shop, Map<String, Integer> purchases,
 			Map<String, Integer> failedFamilies, boolean stateUncertain) {

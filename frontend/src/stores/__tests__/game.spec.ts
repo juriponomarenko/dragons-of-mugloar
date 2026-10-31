@@ -194,6 +194,68 @@ describe('game store', () => {
     expect(store.busy).toBe(false)
   })
 
+  it('does not double the turns a resume already listed while a server-side finish was running', async () => {
+    api.startGame.mockResolvedValue(gameView({ gameId: 'g1' }))
+    let finish: (value: Awaited<ReturnType<typeof gameApi.autoplay>>) => void = () => {}
+    api.autoplay.mockReturnValueOnce(new Promise((resolve) => (finish = resolve)))
+    const store = useGameStore()
+    await store.startGame()
+    const pendingFinish = store.finishGame()
+
+    // the player navigated away and back while the server was still playing
+    const first = turnView({ turn: 1, automated: true })
+    api.getGame.mockResolvedValue(gameView({ gameId: 'g1', turn: 1 }))
+    api.getHistory.mockResolvedValue([first])
+    await store.loadGame('g1')
+    expect(store.history).toHaveLength(1)
+
+    finish({
+      state: gameView({ gameId: 'g1', turn: 2, gameOver: true, lives: 0 }),
+      turns: [first, turnView({ turn: 2, automated: true })],
+      gameOver: true,
+      stoppedBecause: 'Game over',
+    })
+    await pendingFinish
+
+    expect(store.history.map((t) => t.turn)).toEqual([1, 2])
+    expect(store.automatedTurns).toBe(2)
+    expect(store.isGameOver).toBe(true)
+  })
+
+  it('drops a resumed game the backend has forgotten', async () => {
+    api.getGame.mockResolvedValue(gameView({ gameId: 'g2', turn: 3 }))
+    api.getHistory.mockResolvedValue([turnView()])
+    const store = useGameStore()
+    await store.loadGame('g2')
+    expect(store.lastGameId).toBe('g2')
+
+    // the backend restarted in between: it keeps games in memory
+    const gone = new ApiError(404, 'Game not found', 'unknown')
+    api.getGame.mockRejectedValue(gone)
+    api.getHistory.mockRejectedValue(gone)
+
+    expect(await store.loadGame('g2')).toBe(false)
+
+    expect(store.game).toBeNull()
+    expect(store.loadStatus).toBe('not-found')
+    expect(store.lastGameId).toBeNull()
+    expect(store.error).toBe('unknown')
+    expect(store.busy).toBe(false)
+  })
+
+  it('drops the game when an action finds the backend has forgotten it', async () => {
+    api.startGame.mockResolvedValue(gameView({ gameId: 'g1' }))
+    api.solveAd.mockRejectedValue(new ApiError(404, 'Game not found', 'unknown'))
+    const store = useGameStore()
+    await store.startGame()
+
+    await store.solveAd('a1')
+
+    expect(store.game).toBeNull()
+    expect(store.loadStatus).toBe('not-found')
+    expect(store.lastGameId).toBeNull()
+  })
+
   it('reloads everything after an action whose outcome is unknown', async () => {
     api.startGame.mockResolvedValue(gameView({ gameId: 'g1' }))
     api.solveAd.mockRejectedValue(

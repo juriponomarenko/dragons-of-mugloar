@@ -3,6 +3,7 @@ package com.ponomarenko.mugloar.service;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalInt;
 import java.util.function.Supplier;
 
 import com.ponomarenko.mugloar.client.MugloarApiClient;
@@ -94,21 +95,34 @@ public class GameEngine {
 			throw ex;
 		}
 		GameState after = session.state().after(response);
+		// A failed ad changes no gold; a solved one adds its reward, known when the ad is.
+		OptionalInt goldDelta = !response.success() ? OptionalInt.of(0)
+				: ad != null ? OptionalInt.of(ad.reward()) : OptionalInt.empty();
 		TurnRecord record = session.record(new TurnRecord(after.turn(), ActionType.SOLVE, adId,
 				ad != null ? ad.message() : adId, ad != null ? ad.family() : "", response.success(),
-				response.message(), reason, automated, after, Map.of(), Instant.now()));
+				response.message(), reason, automated, after, Map.of(), Instant.now()), goldDelta);
 		log.debug("Game {} turn {}: solve {} -> {} (lives={}, gold={}, score={})", after.gameId(), after.turn(), adId,
 				response.success() ? "success" : "failure", after.lives(), after.gold(), after.score());
 		return record;
 	}
 
-	/** Buys an item, refusing up front when it is unknown or unaffordable (a failed purchase still costs a turn). */
+	/**
+	 * Buys an item, refusing up front when it is unknown or unaffordable (a failed purchase still
+	 * costs a turn), or while an earlier action went unanswered: the gold is then not known for
+	 * certain, and an unanswered purchase must not be repeated. Solving an ad settles both.
+	 */
 	public TurnRecord buy(GameSession session, String itemId, String reason, boolean automated) {
 		requireActive(session);
 		ShopItem item = fetchShop(session).stream()
 				.filter(i -> i.id().equals(itemId))
 				.findFirst()
 				.orElseThrow(() -> new InvalidActionException("Unknown shop item '" + itemId + "'"));
+		if (session.isStateUncertain()) {
+			throw new InvalidActionException(session.pendingPurchase()
+					.map(p -> "The purchase of '" + p.name() + "' got no answer and may have gone through")
+					.orElse("The last action got no answer, so the gold is not known for certain")
+					+ "; solve an ad first to refresh the game");
+		}
 		if (session.state().gold() < item.cost()) {
 			throw new InvalidActionException("Not enough gold for '" + item.name() + "': costs " + item.cost()
 					+ ", you have " + session.state().gold());
@@ -118,13 +132,17 @@ public class GameEngine {
 			response = guardGameOver(session, () -> client.buy(session.gameId(), itemId));
 		}
 		catch (MugloarApiException ex) {
-			noteIfUncertain(session, ex);
+			if (ex.getStatus() == MugloarApiException.NO_RESPONSE) {
+				log.warn("Game {}: no answer to the purchase of {}; it may have gone through", session.gameId(), itemId);
+				session.markPurchaseUnanswered(item);
+			}
 			throw ex;
 		}
 		GameState after = session.state().after(response);
 		String message = response.shoppingSuccess() ? "Bought " + item.name() : "Purchase of " + item.name() + " failed";
+		OptionalInt goldDelta = OptionalInt.of(response.shoppingSuccess() ? -item.cost() : 0);
 		TurnRecord record = session.record(new TurnRecord(after.turn(), ActionType.BUY, itemId, item.name(), "",
-				response.shoppingSuccess(), message, reason, automated, after, Map.of(), Instant.now()));
+				response.shoppingSuccess(), message, reason, automated, after, Map.of(), Instant.now()), goldDelta);
 		log.debug("Game {} turn {}: buy {} -> {} (gold={}, lives={}, level={})", after.gameId(), after.turn(), itemId,
 				response.shoppingSuccess(), after.gold(), after.lives(), after.level());
 		return record;
@@ -156,8 +174,8 @@ public class GameEngine {
 	}
 
 	/**
-	 * An action that got no answer (timeout, connection reset) may still have been carried out;
-	 * the game's gold and lives are unknown until the next answer, so the session says so.
+	 * A solve that got no answer (timeout, connection reset) may still have been carried out; the
+	 * game's gold and lives are unknown until the next answer, so the session says so.
 	 */
 	private static void noteIfUncertain(GameSession session, MugloarApiException ex) {
 		if (ex.getStatus() == MugloarApiException.NO_RESPONSE) {

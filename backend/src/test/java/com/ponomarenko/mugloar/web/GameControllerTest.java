@@ -177,7 +177,7 @@ class GameControllerTest {
 		when(gameService.buy("g1", "hpot")).thenThrow(new InvalidActionException("Not enough gold"));
 
 		mockMvc.perform(post("/api/games/g1/shop/hpot/buy"))
-				.andExpect(status().isUnprocessableEntity())
+				.andExpect(status().isUnprocessableContent())
 				.andExpect(jsonPath("$.title").value("Action not possible"))
 				.andExpect(jsonPath("$.detail").value("Not enough gold"));
 	}
@@ -231,7 +231,7 @@ class GameControllerTest {
 				.thenThrow(new NoMoveAvailableException("No ads available and nothing affordable to buy"));
 
 		mockMvc.perform(post("/api/games/g1/autoplay/step"))
-				.andExpect(status().isUnprocessableEntity())
+				.andExpect(status().isUnprocessableContent())
 				.andExpect(jsonPath("$.title").value("Action not possible"))
 				.andExpect(jsonPath("$.detail").value("No ads available and nothing affordable to buy"));
 	}

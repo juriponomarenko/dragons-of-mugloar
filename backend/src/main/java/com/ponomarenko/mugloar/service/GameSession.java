@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
@@ -51,10 +52,17 @@ public class GameSession {
 	private volatile Map<String, Ad> lastBoard = Map.of();
 
 	/**
-	 * Set when an action got no answer: the game may have carried it out, so gold and lives are
-	 * not to be trusted until the next answer refreshes them. Nothing is bought meanwhile.
+	 * Set when a solve got no answer: the game may have carried it out, so gold and lives are not
+	 * to be trusted until the next answer refreshes them. Nothing is bought meanwhile.
 	 */
 	private volatile boolean stateUncertain;
+
+	/**
+	 * A purchase that got no answer. The game may have carried it out, and the game API has no
+	 * endpoint that would say: the next answer's gold tells (see {@link #record}), and until then
+	 * nothing is bought, so the purchase is never repeated by mistake.
+	 */
+	private volatile ShopItem pendingPurchase;
 
 	public GameSession(GameState initial) {
 		this.snapshot = new Snapshot(initial, Map.of(), Map.of());
@@ -89,12 +97,22 @@ public class GameSession {
 		return state().isOver();
 	}
 
+	/** Whether an unanswered action leaves gold, lives or purchases in doubt; nothing is bought then. */
 	public boolean isStateUncertain() {
-		return stateUncertain;
+		return stateUncertain || pendingPurchase != null;
 	}
 
 	void markStateUncertain() {
 		stateUncertain = true;
+	}
+
+	void markPurchaseUnanswered(ShopItem item) {
+		pendingPurchase = item;
+	}
+
+	/** The purchase whose answer was lost, until the next answer has settled whether it went through. */
+	public Optional<ShopItem> pendingPurchase() {
+		return Optional.ofNullable(pendingPurchase);
 	}
 
 	/** Runs {@code work} while holding this session's lock. */
@@ -108,13 +126,25 @@ public class GameSession {
 		}
 	}
 
-	/** Stores a turn and returns it completed with the purchases as they stand afterwards. */
-	TurnRecord record(TurnRecord turn) {
+	/**
+	 * Stores a turn and returns it completed with the purchases as they stand afterwards.
+	 *
+	 * @param goldDelta how much this action alone changed the gold (a reward, minus a price, or
+	 * nothing), when known. It settles an unanswered purchase: the gold the answer reports either
+	 * is exactly what this action explains, so that purchase never happened, or it is not, so it
+	 * did and is counted. When the delta is unknown the purchase is counted rather than repeated.
+	 */
+	TurnRecord record(TurnRecord turn, OptionalInt goldDelta) {
 		lock.lock();
 		try {
 			Snapshot current = snapshot;
 			Map<String, Integer> purchases = current.purchases();
 			Map<String, Integer> failedFamilies = current.failedFamilies();
+			ShopItem pending = pendingPurchase;
+			if (pending != null && wentThrough(current.state().gold(), turn.stateAfter().gold(), goldDelta)) {
+				purchases = incremented(purchases, pending.id());
+			}
+			pendingPurchase = null;
 			if (turn.action() == ActionType.BUY && turn.success()) {
 				purchases = incremented(purchases, turn.targetId());
 			}
@@ -130,6 +160,10 @@ public class GameSession {
 		finally {
 			lock.unlock();
 		}
+	}
+
+	private static boolean wentThrough(int goldBefore, int goldAfter, OptionalInt goldDelta) {
+		return goldDelta.isEmpty() || goldAfter != goldBefore + goldDelta.getAsInt();
 	}
 
 	private static Map<String, Integer> incremented(Map<String, Integer> counts, String key) {

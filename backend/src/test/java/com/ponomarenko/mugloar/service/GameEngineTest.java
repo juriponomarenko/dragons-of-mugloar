@@ -183,6 +183,61 @@ class GameEngineTest {
 	}
 
 	@Test
+	void anUnansweredPurchaseBlocksBuyingUntilAnAdHasBeenSolved() {
+		api.gold = 300;
+		session = engine.start();
+		api.loseNextBuyResponse = true;
+		assertThatExceptionOfType(MugloarApiException.class).isThrownBy(() -> engine.buy(session, "cs", "", true));
+		assertThat(session.isStateUncertain()).isTrue();
+		assertThat(session.pendingPurchase()).map(item -> item.id()).hasValue("cs");
+
+		// a manual purchase is refused too: it could repeat the one that may have gone through
+		assertThatExceptionOfType(InvalidActionException.class)
+				.isThrownBy(() -> engine.buy(session, "hpot", "", false))
+				.withMessageContaining("got no answer");
+		assertThat(api.boughtItemIds).containsExactly("cs");
+
+		engine.fetchAds(session);
+		TurnRecord solved = engine.solve(session, "easy", "", false);
+
+		// 300 - 100 + 20: the gold says the claws were bought, so they are counted and buying is open again
+		assertThat(solved.stateAfter().gold()).isEqualTo(220);
+		assertThat(solved.purchasesAfter()).containsEntry("cs", 1);
+		assertThat(session.isStateUncertain()).isFalse();
+		assertThat(engine.buy(session, "hpot", "", false).purchasesAfter()).containsEntry("cs", 1)
+				.containsEntry("hpot", 1);
+	}
+
+	@Test
+	void anUnansweredPurchaseIsCountedWhenTheNextAnswerCannotTell() {
+		api.gold = 300;
+		session = engine.start();
+		api.loseNextBuyResponse = true;
+		assertThatExceptionOfType(MugloarApiException.class).isThrownBy(() -> engine.buy(session, "cs", "", true));
+
+		// the ad is on no fetched board, so its reward is unknown: counting the purchase beats repeating it
+		TurnRecord solved = engine.solve(session, "easy", "", false);
+
+		assertThat(solved.purchasesAfter()).containsEntry("cs", 1);
+	}
+
+	@Test
+	void anUnansweredSolveBlocksBuyingUntilTheNextAnswer() {
+		api.gold = 300;
+		session = engine.start();
+		api.solveFailures.push(new MugloarApiException(MugloarApiException.NO_RESPONSE, "", "read timed out"));
+		assertThatExceptionOfType(MugloarApiException.class).isThrownBy(() -> engine.solve(session, "easy", "", false));
+
+		assertThatExceptionOfType(InvalidActionException.class)
+				.isThrownBy(() -> engine.buy(session, "cs", "", false))
+				.withMessageContaining("not known for certain");
+
+		engine.solve(session, "easy", "", false);
+		assertThat(session.isStateUncertain()).isFalse();
+		assertThat(engine.buy(session, "cs", "", false).success()).isTrue();
+	}
+
+	@Test
 	void buyRefusesUnknownItemsWithoutCallingTheApi() {
 		assertThatExceptionOfType(InvalidActionException.class)
 				.isThrownBy(() -> engine.buy(session, "sword", "", false))

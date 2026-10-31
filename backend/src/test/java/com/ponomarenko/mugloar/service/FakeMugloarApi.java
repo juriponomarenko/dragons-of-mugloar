@@ -57,6 +57,9 @@ class FakeMugloarApi implements MugloarApiClient {
 	/** Carries out the next purchase but loses the answer, as a dropped connection would. */
 	boolean loseNextBuyResponse;
 
+	/** Never receives the next purchase, as a connection that failed before the request got through. */
+	boolean dropNextBuyRequest;
+
 	@Override
 	public GameStartResponse startGame() {
 		return new GameStartResponse(GAME_ID, lives, gold, level, score, 0, turn);
@@ -102,6 +105,10 @@ class FakeMugloarApi implements MugloarApiClient {
 
 	@Override
 	public PurchaseResponse buy(String gameId, String itemId) {
+		if (dropNextBuyRequest) {
+			dropNextBuyRequest = false;
+			throw new MugloarApiException(MugloarApiException.NO_RESPONSE, "", "connect timed out");
+		}
 		turn++;
 		ShopItemDto item = shop.stream().filter(i -> i.id().equals(itemId)).findFirst().orElse(null);
 		boolean success = item != null && gold >= item.cost();

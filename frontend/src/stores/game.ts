@@ -40,6 +40,20 @@ function isStaleStateError(cause: unknown): boolean {
   return cause instanceof ApiError && (cause.status === 422 || cause.status === 409)
 }
 
+/** The backend does not know the game any more: it was restarted, and games live in its memory. */
+function isUnknownGame(cause: unknown): boolean {
+  return cause instanceof ApiError && cause.status === 404
+}
+
+/** Turn numbers are unique within a game, so the history can be merged by them without duplicates. */
+function mergeTurns(known: TurnView[], incoming: TurnView[]): TurnView[] {
+  const byTurn = new Map(known.map((t) => [t.turn, t]))
+  for (const turn of incoming) {
+    byTurn.set(turn.turn, turn)
+  }
+  return [...byTurn.values()].sort((a, b) => a.turn - b.turn)
+}
+
 /**
  * The request may or may not have reached the game: a dropped connection or a gateway error
  * says nothing about whether the backend went on and took the turn.
@@ -125,10 +139,33 @@ export const useGameStore = defineStore('game', () => {
     clearNotice()
   }
 
+  /** Records turns the server just took; a reload that already listed them does not double them. */
+  function applyTurns(state: GameView, turns: TurnView[]): void {
+    game.value = state
+    lastTurn.value = turns[turns.length - 1] ?? lastTurn.value
+    history.value = mergeTurns(history.value, turns)
+  }
+
   function applyTurn(turn: TurnView): void {
-    game.value = turn.state
-    lastTurn.value = turn
-    history.value = [...history.value, turn]
+    applyTurns(turn.state, [turn])
+  }
+
+  /**
+   * The backend has forgotten the game (it keeps games in memory, so a restart does that): take it
+   * off the screen, which shows the "not found" card, and stop offering to resume it.
+   */
+  function dropUnknownGame(id: string): void {
+    game.value = null
+    ads.value = []
+    shop.value = []
+    history.value = []
+    reputation.value = null
+    lastTurn.value = null
+    loadStatus.value = 'not-found'
+    if (lastGameId.value === id) {
+      lastGameId.value = null
+      writeLastGameId(null)
+    }
   }
 
   async function refreshBoard(): Promise<void> {
@@ -147,7 +184,9 @@ export const useGameStore = defineStore('game', () => {
     } catch (cause) {
       if (isCurrent(requested)) {
         captureError(cause)
-        if (isStaleStateError(cause)) {
+        if (isUnknownGame(cause)) {
+          dropUnknownGame(id)
+        } else if (isStaleStateError(cause)) {
           // the game ended behind our back, or the game server forgot it: show its final state
           await reloadState(id, requested)
         }
@@ -168,9 +207,14 @@ export const useGameStore = defineStore('game', () => {
       const [state, turns] = await Promise.all([gameApi.getGame(id), gameApi.getHistory(id)])
       if (isCurrent(requested) && isAtLeastAsNewAsScreen(state)) {
         game.value = state
-        history.value = turns
+        history.value = mergeTurns(history.value, turns)
       }
-    } catch {
+    } catch (cause) {
+      if (isCurrent(requested) && isUnknownGame(cause)) {
+        captureError(cause)
+        dropUnknownGame(id)
+        return
+      }
       // keep what we have; the original error is already on screen
     }
     if (isCurrent(requested)) {
@@ -215,8 +259,9 @@ export const useGameStore = defineStore('game', () => {
    */
   async function loadGame(id: string): Promise<boolean> {
     if (gameId.value === id && game.value) {
-      // Already on screen (e.g. navigated away and back): the server may have moved on meanwhile.
-      // Actions are held while the reload is in flight so a slow answer cannot undo a newer turn.
+      // Already on screen (e.g. navigated away and back): the server may have moved on meanwhile,
+      // or forgotten the game. Actions are held while the reload is in flight so a slow answer
+      // cannot undo a newer turn.
       const requested = generation
       loading.game = true
       try {
@@ -226,7 +271,7 @@ export const useGameStore = defineStore('game', () => {
           loading.game = false
         }
       }
-      return true
+      return game.value !== null
     }
     reset()
     const requested = generation
@@ -249,11 +294,10 @@ export const useGameStore = defineStore('game', () => {
         return false
       }
       captureError(cause)
-      const notFound = cause instanceof ApiError && cause.status === 404
-      loadStatus.value = notFound ? 'not-found' : 'failed'
-      if (notFound && lastGameId.value === id) {
-        lastGameId.value = null
-        writeLastGameId(null)
+      if (isUnknownGame(cause)) {
+        dropUnknownGame(id)
+      } else {
+        loadStatus.value = 'failed'
       }
       return false
     } finally {
@@ -304,7 +348,9 @@ export const useGameStore = defineStore('game', () => {
 
   /** Brings the screen back in line with the server after an action that may have changed it. */
   async function recoverFrom(cause: unknown, id: string, requested: number): Promise<void> {
-    if (isUncertainOutcome(cause)) {
+    if (isUnknownGame(cause)) {
+      dropUnknownGame(id)
+    } else if (isUncertainOutcome(cause)) {
       await reloadFromServer(id, requested)
     } else if (isStaleStateError(cause)) {
       await reloadState(id, requested)
@@ -408,9 +454,7 @@ export const useGameStore = defineStore('game', () => {
     await mutate(
       (id) => gameApi.autoplay(id),
       (outcome) => {
-        game.value = outcome.state
-        history.value = [...history.value, ...outcome.turns]
-        lastTurn.value = outcome.turns[outcome.turns.length - 1] ?? lastTurn.value
+        applyTurns(outcome.state, outcome.turns)
         if (!outcome.gameOver) {
           // Not a failure: the run stopped early (turn cap, upstream trouble) and the game goes on.
           notice.value = outcome.stoppedBecause

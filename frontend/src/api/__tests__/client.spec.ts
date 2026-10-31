@@ -99,6 +99,26 @@ describe('gameApi', () => {
     expect(error.message).toContain('502')
   })
 
+  it('treats a body that cannot be read as a network failure', async () => {
+    fetchMock.mockImplementation(
+      async () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.error(new TypeError('network error'))
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+    )
+
+    const error = (await gameApi.solveAd('g1', 'ad1').catch((e: unknown) => e)) as ApiError
+
+    expect(error).toBeInstanceOf(ApiError)
+    expect(error.isNetworkError).toBe(true)
+    expect(error.message).toContain('network error')
+  })
+
   it('wraps network failures as status 0', async () => {
     fetchMock.mockRejectedValue(new TypeError('Failed to fetch'))
 

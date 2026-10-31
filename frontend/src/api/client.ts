@@ -22,7 +22,7 @@ export class ApiError extends Error {
     this.errors = errors
   }
 
-  /** The request never reached the backend (network down, CORS, timeout). */
+  /** No usable answer came back (network down, CORS, timeout, or a body cut off mid-way). */
   get isNetworkError(): boolean {
     return this.status === 0
   }
@@ -54,7 +54,13 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!response.ok) {
     throw await toApiError(response)
   }
-  return (await response.json()) as T
+  try {
+    return (await response.json()) as T
+  } catch (cause) {
+    // The headers arrived but the body did not: the backend may well have acted on the request.
+    const message = cause instanceof Error ? cause.message : String(cause)
+    throw new ApiError(0, 'Backend unreachable', `Could not read the backend's answer: ${message}`)
+  }
 }
 
 async function toApiError(response: Response): Promise<ApiError> {
