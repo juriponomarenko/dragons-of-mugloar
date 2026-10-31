@@ -140,6 +140,7 @@ src/views/       HomeView (start / resume) and PlayView (the game screen), wired
 src/components/  StatusBar, AdBoard + AdCard, ShopPanel, AutoplayControls, FinishingPanel, ReputationPanel, HistoryLog, banners/toast, ViewTabs + SwipeTrack (phone navigation)
 src/composables/ useMediaQuery
 src/utils/       Formatting helpers and the dragon lore shown while the server plays
+e2e/             Playwright tests (see Tests)
 ```
 
 ### What the player gets
@@ -166,8 +167,9 @@ Below 900px the game screen is the three swipeable views; from 900px the board s
 | --- | --- | --- |
 | Backend, 142 tests | `cd backend && ./mvnw test` | Label parsing and decoding, scoring and eligibility, shopping, the strategy defaults as bound by Spring Boot, the CLI exit code, the turn loop against an in-memory fake of the game API (expired ads, outages, lost answers, rate limits, game over), the HTTP client with `MockRestServiceServer`, the controller with `MockMvc` |
 | Frontend, 82 tests | `cd frontend && pnpm test:unit` | The API client against a mocked `fetch`, the store with a mocked API (actions, error resync, the autoplay loop with fake timers, server-side finish, forgotten games), the components with Vue Test Utils (rendering, sorting and filtering, events, the tab bar and the swipe track) |
+| End-to-end, 3 tests | `cd frontend && pnpm test:e2e` | Playwright in Chromium through the real frontend and backend: starting a game and resuming it from the start page, solving the recommended ad and buying a potion with the reward, and letting the advisor play one turn and then finish the game on the server |
 
-The frontend also runs `pnpm lint` (oxlint + ESLint), `pnpm type-check` (vue-tsc) and `pnpm build`.
+The end-to-end run starts both servers itself: the backend on its test classpath (`spring-boot:test-run`), where `E2eBackend` swaps the HTTP client for `StubMugloarApi`, a deterministic in-memory game, so the tests need no network and assert exact numbers; and the Vite dev server pointed at it. Both use ports of their own (8081 and 5174), so servers already running on 8080 and 5173 are left alone. It needs `JAVA_HOME` set, as the backend does, and, once, `pnpm exec playwright install chromium`. The frontend also runs `pnpm lint` (oxlint + ESLint), `pnpm type-check` (vue-tsc) and `pnpm build`.
 
 ## Known limitations
 
@@ -177,7 +179,7 @@ The frontend also runs `pnpm lint` (oxlint + ESLint), `pnpm type-check` (vue-tsc
 - **No push updates.** A second browser on the same game sees a change only when it asks. Fix: an SSE stream of turns, merged by the store's existing turn merge.
 - **The rate limit caps a game** around turn 300 in practice; the waits keep it alive but slow. Fix: measure the limit and pace requests below it.
 - **Success rates are assumed**, not measured; they are one table in `Probability`. Fix: log label and outcome per ad over fifty CLI games and replace the table with the measured rates.
-- **No end-to-end tests.** The two views are checked by hand. Fix: Playwright against a backend profile backed by the fake game API from the tests.
+- **End-to-end coverage is thin.** Three happy paths in Chromium at desktop width; the phone layout, failures and the game-over path are checked by hand. Fix: a phone project in the Playwright config, and a stub game that can be told to fail.
 - **Requests are never cancelled.** Late answers are dropped by the generation counter rather than aborted. Fix: an `AbortController` per generation.
 
 ## Use of AI tools

@@ -12,9 +12,10 @@ export default defineConfig({
   ],
   server: {
     proxy: {
-      // Forward API calls to the Spring Boot backend during development
+      // Forward API calls to the Spring Boot backend during development (the Playwright tests
+      // point this at a backend of their own)
       '/api': {
-        target: 'http://localhost:8080',
+        target: process.env.BACKEND_URL ?? 'http://localhost:8080',
         changeOrigin: true,
       },
     },
