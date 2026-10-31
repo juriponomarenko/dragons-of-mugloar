@@ -1,3 +1,5 @@
+import type { TurnView } from '@/api/types'
+
 /** Formats a 0..1 rate as a whole percentage, e.g. 0.95 -> "95%". */
 export function percent(rate: number): string {
   return `${Math.round(rate * 100)}%`
@@ -24,6 +26,18 @@ export function seconds(ms: number): string {
 /** "1 turn" / "3 turns". */
 export function turns(count: number): string {
   return `${count} ${count === 1 ? 'turn' : 'turns'}`
+}
+
+/** What a turn did, in the past tense: "solved", "failed", "bought" or "investigated". */
+export function outcome(turn: Pick<TurnView, 'action' | 'success'>): string {
+  switch (turn.action) {
+    case 'BUY':
+      return 'bought'
+    case 'INVESTIGATE':
+      return 'investigated'
+    default:
+      return turn.success ? 'solved' : 'failed'
+  }
 }
 
 /** Short time of day for history entries. */

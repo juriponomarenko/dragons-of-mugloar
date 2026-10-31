@@ -39,7 +39,7 @@ function tone(value: number): string {
       :disabled="disabled"
       @click="emit('investigate')"
     >
-      {{ reputation ? 'Investigate again' : 'Investigate' }}
+      {{ reputation ? 'Investigate again' : 'Investigate' }} (1 turn)
     </button>
   </section>
 </template>

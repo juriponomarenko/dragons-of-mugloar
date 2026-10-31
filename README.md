@@ -147,7 +147,7 @@ Everything above is tunable through `mugloar.strategy.*` properties (see `Strate
 | `POST` | `/api/games/{id}/ads/{adId}/solve` | Attempt an ad |
 | `GET` | `/api/games/{id}/shop` | Shop items with affordability, purchase count and the strategy's suggestion |
 | `POST` | `/api/games/{id}/shop/{itemId}/buy` | Buy an item |
-| `POST` | `/api/games/{id}/reputation` | Investigate reputation |
+| `POST` | `/api/games/{id}/reputation` | Investigate reputation; the game charges a turn, which is recorded in the history and returned with the result |
 | `POST` | `/api/games/{id}/autoplay/step` | Let the strategy take one action |
 | `POST` | `/api/games/{id}/autoplay` | Let the strategy play to the end (optional body `{"maxTurns": n}`) |
 | `GET` | `/api/games/{id}/history` | Every action taken in the game, with the strategy's reasoning and the state and purchases as they stood after it |
@@ -193,7 +193,7 @@ src/utils/       Formatting helpers
 - **Shop** showing what is affordable, how many times each item was bought, and the item the strategy would buy now. Unaffordable items are disabled, so no turn is wasted on a failed purchase.
 - **Advisor panel**: play one turn, run autoplay turn by turn with an adjustable pause (the board refreshes after every step, so you can watch the reasoning), stop at any time, or hand the rest of the game to the server. A server run that stops before the game is over says why in an info banner.
 - **History** of every action with the outcome, the API's message and, for advisor moves, the reason it was chosen.
-- **Reputation** on demand, a game‑over banner that says whether the 1000‑point target was met, and a toast after each action.
+- **Reputation** on demand (each investigation costs a turn and shows up in the history), a game‑over banner that says whether the 1000‑point target was met, and a toast after each action.
 - The last game id is remembered in `localStorage`, so a refresh or the "Resume last game" button brings you back.
 
 ### State management and error handling
@@ -206,7 +206,7 @@ Mobile‑first CSS with a single breakpoint at 900px (board + sidebar) and 1100p
 
 ### Tests
 
-`pnpm test:unit` runs 60 Vitest tests: the API client against a mocked `fetch` (URL building, id validation, problem documents, network failures), the store with a mocked API (start/load/solve/buy, error resync, the autoplay loop with fake timers, server‑side finish), and the components with Vue Test Utils (rendering, sorting/filtering, emitted events, disabled states).
+`pnpm test:unit` runs 62 Vitest tests: the API client against a mocked `fetch` (URL building, id validation, problem documents, network failures), the store with a mocked API (start/load/solve/buy, error resync, the autoplay loop with fake timers, server‑side finish), and the components with Vue Test Utils (rendering, sorting/filtering, emitted events, disabled states).
 
 ## Known limitations and possible next steps
 

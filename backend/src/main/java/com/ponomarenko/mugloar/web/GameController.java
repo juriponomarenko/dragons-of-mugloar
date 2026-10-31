@@ -2,15 +2,16 @@ package com.ponomarenko.mugloar.web;
 
 import java.util.List;
 
-import com.ponomarenko.mugloar.domain.Reputation;
 import com.ponomarenko.mugloar.service.AutoplayOutcome;
 import com.ponomarenko.mugloar.service.GameService;
 import com.ponomarenko.mugloar.service.GameSession;
+import com.ponomarenko.mugloar.service.Investigation;
 import com.ponomarenko.mugloar.service.TurnRecord;
 import com.ponomarenko.mugloar.web.dto.AdView;
 import com.ponomarenko.mugloar.web.dto.AutoplayRequest;
 import com.ponomarenko.mugloar.web.dto.AutoplayView;
 import com.ponomarenko.mugloar.web.dto.GameView;
+import com.ponomarenko.mugloar.web.dto.InvestigationView;
 import com.ponomarenko.mugloar.web.dto.ShopItemView;
 import com.ponomarenko.mugloar.web.dto.TurnView;
 import jakarta.validation.Valid;
@@ -78,9 +79,12 @@ public class GameController {
 		return ViewMapper.turn(record, gameService.getGame(gameId));
 	}
 
+	/** Costs a turn in the game, so the answer carries the recorded turn besides the reputation. */
 	@PostMapping("/{gameId}/reputation")
-	public Reputation investigate(@PathVariable @ValidId String gameId) {
-		return gameService.investigate(gameId);
+	public InvestigationView investigate(@PathVariable @ValidId String gameId) {
+		Investigation investigation = gameService.investigate(gameId);
+		return new InvestigationView(investigation.reputation(),
+				ViewMapper.turn(investigation.turn(), gameService.getGame(gameId)));
 	}
 
 	@PostMapping("/{gameId}/autoplay/step")

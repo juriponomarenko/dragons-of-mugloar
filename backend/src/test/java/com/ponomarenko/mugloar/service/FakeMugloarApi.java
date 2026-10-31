@@ -124,6 +124,7 @@ class FakeMugloarApi implements MugloarApiClient {
 
 	@Override
 	public ReputationResponse investigateReputation(String gameId) {
-		return new ReputationResponse(1, 0, -1);
+		turn++; // like the real API, an investigation costs a turn
+		return new ReputationResponse(1, 0.5, -1);
 	}
 }

@@ -124,7 +124,9 @@ public class GameSession {
 			TurnRecord stored = turn.withPurchases(purchases);
 			history.add(stored);
 			snapshot = new Snapshot(stored.stateAfter(), purchases, failedFamilies);
-			stateUncertain = false; // every answer carries the full state
+			if (turn.action() != ActionType.INVESTIGATE) {
+				stateUncertain = false; // solve and buy answers carry the full state; an investigation's does not
+			}
 			return stored;
 		}
 		finally {

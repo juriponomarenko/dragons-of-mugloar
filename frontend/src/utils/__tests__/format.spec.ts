@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { compact, gold, percent, seconds, time, turns } from '../format'
+import { compact, gold, outcome, percent, seconds, time, turns } from '../format'
 
 describe('format helpers', () => {
   it('formats rates as whole percentages', () => {
@@ -32,6 +32,13 @@ describe('format helpers', () => {
     expect(turns(1)).toBe('1 turn')
     expect(turns(0)).toBe('0 turns')
     expect(turns(7)).toBe('7 turns')
+  })
+
+  it('names what a turn did', () => {
+    expect(outcome({ action: 'SOLVE', success: true })).toBe('solved')
+    expect(outcome({ action: 'SOLVE', success: false })).toBe('failed')
+    expect(outcome({ action: 'BUY', success: true })).toBe('bought')
+    expect(outcome({ action: 'INVESTIGATE', success: true })).toBe('investigated')
   })
 
   it('formats times and tolerates garbage', () => {

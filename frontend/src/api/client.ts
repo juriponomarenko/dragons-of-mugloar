@@ -2,8 +2,8 @@ import type {
   AdView,
   AutoplayView,
   GameView,
+  InvestigationView,
   ProblemDetail,
-  Reputation,
   ShopItemView,
   TurnView,
 } from './types'
@@ -96,7 +96,7 @@ export const gameApi = {
   buyItem: async (gameId: string, itemId: string) =>
     post<TurnView>(`/${requireId(gameId, 'Game id')}/shop/${requireId(itemId, 'Item id')}/buy`),
   investigate: async (gameId: string) =>
-    post<Reputation>(`/${requireId(gameId, 'Game id')}/reputation`),
+    post<InvestigationView>(`/${requireId(gameId, 'Game id')}/reputation`),
   autoplayStep: async (gameId: string) =>
     post<TurnView>(`/${requireId(gameId, 'Game id')}/autoplay/step`),
   autoplay: async (gameId: string, maxTurns?: number) =>

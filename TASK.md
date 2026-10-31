@@ -81,4 +81,67 @@ Notes observed while probing the API:
 - The game starts with 3 lives, 0 gold, level 0.
 - Each ad carries a textual `probability` (e.g. "Piece of cake", "Quite likely", …) and an `encrypted` flag (`null`, `1` or `2`).
 - Buying an item consumes a turn even when the purchase fails.
-- An unknown `adId`/`gameId` yields HTTP 400.
+- An unknown, expired or already solved `adId` yields HTTP 400; an unknown `gameId` yields HTTP 404.
+
+### Further API findings (probed 31 Oct 2026)
+
+**Turns and board**
+
+- Costs a turn: solve, any buy attempt (failed included), `investigate/reputation`. Free: `GET messages`, `GET shop`.
+- Board: 10 ads. `expiresIn` starts at 7 (plain) or 2–3 (encrypted), −1 per turn, solvable at 1, removed the next turn. Solved and expired ads are replaced immediately; the opening board expires as a whole at turn 7.
+- Solving an already solved, expired or foreign ad: 400.
+
+**Encryption**
+
+- `encrypted: 1` = Base64, `2` = ROT13; applied to `adId`, `message`, `probability`. `reward` and `expiresIn` are plain.
+- Solve requires the decoded `adId` (encoded → 400).
+- Encrypted ads appear from turn ~16–23, reward 130–200, mostly *Risky* or worse.
+
+**Shop, lives, level, score**
+
+- Items, fixed across games: `hpot` 50; `cs`, `gas`, `wax`, `tricks`, `wingpot` 100; `ch`, `rf`, `iron`, `mtrix`, `wingpotmax` 300.
+- `hpot`: +1 life, no cap (9 observed), allowed at full lives.
+- 100-gold items: +1 level. 300-gold items: +2 levels. Rebuys stack (68/68 purchases).
+- `score` = sum of rewards; purchases do not reduce it.
+- `highScore` is always 0.
+
+**Labels** (418 solves, diamond traps excluded)
+
+| Label | Success | Rate |
+| --- | --- | --- |
+| Sure thing | 60/60 | 100% |
+| Piece of cake | 125/135 | 93% |
+| Walk in the park | 45/55 | 82% |
+| Quite likely | 17/27 | 63% |
+| Hmmm.... | 8/23 | 35% |
+| Gamble | 13/20 | 65% |
+| Risky | 9/18 | 50% |
+| Rather detrimental | 4/19 | 21% |
+| Playing with fire | 5/20 | 25% |
+| Suicide mission | 3/35 | 9% |
+| Impossible | 0/6 | 0% |
+
+- "Steal super awesome diamond … from …": 0/32, labelled *Sure thing* or *Piece of cake*.
+- Diamond ads appear after the 5th successful "Steal … and share some of the profits with the people" ad (3/3 games; none in 5 games with ≤4). Each such steal: people ≈ +1, state ≈ −2.
+- Solve messages: "You successfully solved the mission!", "You failed on the mission!", "You were defeated on your last mission!" (last life), "You fell into a trap set up, by people who did not appreciate your dealings." (diamond ads).
+- Difficulty rises with the turn: from turn ~60, <5% of ads are *Walk in the park* or better at levels ≤26. Rewards rise too (median "Help defending" 142 at turns 20–39, 202 at 80+).
+- Reputation: decimals; `underworld` always 0; no changes after turn ~30.
+
+**Errors and transport**
+
+| Case | Status | Body |
+| --- | --- | --- |
+| Game over (every endpoint) | 410 | `{"status":"Game Over"}` |
+| Unknown or expired game | 404 | HTML "Not Found" |
+| Unknown route or wrong method | 404 | HTML "Cannot GET /api/v2/…" |
+| Bad ad id | 400 | HTML "Bad Request" |
+| Unknown item id | 200 | `shoppingSuccess: false`, turn consumed |
+| User-Agent `Python-urllib/*`, `libwww-perl/*` | 403 | Cloudflare "error code: 1010" |
+
+- Idle timeout ~10 min (alive at 9 min, 404 at 10.6 min); any request, reads included, resets it (a game polled with `GET messages` every minute survived 16 min).
+- Routes are case-insensitive and accept a trailing slash; ids are case-sensitive.
+- CORS: `Access-Control-Allow-Origin: *`.
+- Latency: solve 0.6–1.3 s, start ~1 s, everything else ~50 ms.
+- No 429 at ~1 req/s (1,332 requests in 25 min).
+- No per-game serialisation: concurrent actions can share a turn number and lose updates (4 parallel `hpot` buys with gold for 1: two `shoppingSuccess: true`, one potion applied, one turn lost).
+- /doc omits `encrypted` and `probability`, and types `reward` and `shoppingSuccess` as String (actual: number, boolean).

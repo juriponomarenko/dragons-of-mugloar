@@ -17,6 +17,7 @@ import com.ponomarenko.mugloar.service.GameNotFoundException;
 import com.ponomarenko.mugloar.service.GameOverException;
 import com.ponomarenko.mugloar.service.GameService;
 import com.ponomarenko.mugloar.service.GameSession;
+import com.ponomarenko.mugloar.service.Investigation;
 import com.ponomarenko.mugloar.service.InvalidActionException;
 import com.ponomarenko.mugloar.service.ShopOffer;
 import com.ponomarenko.mugloar.service.TurnRecord;
@@ -238,13 +239,18 @@ class GameControllerTest {
 
 	@Test
 	void reputationAndHistoryAreExposed() throws Exception {
-		when(gameService.investigate("g1")).thenReturn(new Reputation(1, 0, -1));
+		TurnRecord investigated = new TurnRecord(2, ActionType.INVESTIGATE, "reputation", "Reputation investigation",
+				"", true, "People 1, state 0, underworld -1", "", false, STATE, Map.of(),
+				Instant.parse("2026-10-27T10:01:00Z"));
+		when(gameService.investigate("g1")).thenReturn(new Investigation(new Reputation(1, 0, -1), investigated));
 		when(gameService.getGame("g1")).thenReturn(session());
 		when(gameService.history("g1")).thenReturn(List.of(turn(true)));
 
 		mockMvc.perform(post("/api/games/g1/reputation"))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.underworld").value(-1));
+				.andExpect(jsonPath("$.reputation.underworld").value(-1))
+				.andExpect(jsonPath("$.turn.action").value("INVESTIGATE"))
+				.andExpect(jsonPath("$.turn.turn").value(2));
 		mockMvc.perform(get("/api/games/g1/history"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$[0].reason").value("reason"));
